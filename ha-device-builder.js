@@ -1,0 +1,303 @@
+const fs = require('fs')
+
+const haDeviceFilePath = process.argv[2]
+
+if (typeof haDeviceFilePath !== 'string' || !haDeviceFilePath.endsWith('.ha-device.yaml') || !fs.existsSync(haDeviceFilePath)) {
+    throw new Error('First Parameter was not a valid path to a *.ha-device.yaml file')
+}
+
+const yaml = require('js-yaml')
+
+/**
+ * @type {{
+ *  name: string
+ *  manufacturer?: string
+ *  model?: string
+ *  suggested_area?: string
+ *  sw_version?: string
+ *  availability?: boolean
+ *  wan_deployment?: boolean
+ *  identifiers: string | string[]
+ *  features?: {
+ *      class: "binary_sensor" |
+ *             "button" |
+ *             "light" |
+ *             "sensor" |
+ *             "switch"
+ *      name: string
+ *      unique_id: string
+ *      var_name?: string
+ *      icon?: string
+ *      expire_after?: number
+ *      off_delay?: number
+ *      force_update?: boolean
+ *      unit_of_measurement?: string
+ *      effect_list?: string | string[]
+ *      brightness?: boolean
+ *      temperature?: boolean
+ *      rgb?: boolean
+ *      max_mireds?: number
+ *      min_mireds?: number
+ * }[]
+ * }}
+//  *  "-WIP-alarm_control_panel" |
+//  *  "binary_sensor" |
+//  *  "button" |
+//  *  "-WIP-camera" |
+//  *  "-WIP-cover" |
+//  *  "-WIP-device_tracker" |
+//  *  "-WIP-device_trigger" |
+//  *  "-WIP-fan" |
+//  *  "-WIP-humidifier" |
+//  *  "-WIP-climate" |
+//  *  "light" |
+//  *  "-WIP-lock" |
+//  *  "-WIP-number" |
+//  *  "-WIP-scene" |
+//  *  "-WIP-select" |
+//  *  "sensor" |
+//  *  "switch" |
+//  *  "-WIP-tag_scanner" |
+//  *  "-WIP-vacuum"
+ */
+const device = yaml.load(fs.readFileSync(haDeviceFilePath, 'utf8'))
+
+function toCodeName(name) {
+    return name.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '')
+}
+
+/**
+ * @type {string}
+ */
+let managerComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/components/manager.h').toString()
+
+/**
+ * @type {string}
+ */
+let buttonComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/components/button.h').toString()
+
+const deviceCodeName = toCodeName(device.name)
+
+const discoveryPrefix = 'homeassistant'
+/**
+ * @type {{
+ *      name: string
+ *      unique_id: string
+ *      icon?: string
+ *      expire_after?: number
+ *      off_delay?: number
+ *      force_update?: boolean
+ *      unit_of_measurement?: string
+ *      effect_list?: string | string[]
+ *      availability_topic?: string
+ *      state_topic?: string
+ *      command_topic?: string
+ *      brightness_command_topic?: string
+ *      brightness_state_topic?: string
+ *      color_temp_command_topic?: string
+ *      color_temp_state_topic?: string
+ *      rgb_command_topic?: string
+ *      rgb_state_topic?: string
+ *      effect_command_topic?: string
+ *      effect_state_topic?: string
+ *      max_mireds?: number
+ *      min_mireds?: number
+ *      device: {
+ *          name: string
+ *          model?: string
+ *          manufacturer?: string
+ *          suggested_area?: string
+ *          sw_version?: string
+ *      }
+ * }[]}
+ */
+const haMqttJsonFeatures = []
+
+let outputHeader = ''
+
+if (device.wan_deployment === true) {
+    outputHeader += '#define WAN_DEPLOYMENT\n'
+}
+
+const startIdentifier = '// start\r\n'
+
+// remove the part before the start identifier,
+outputHeader += managerComponent.slice(managerComponent.indexOf(startIdentifier) + startIdentifier.length)
+    // uncomment all "// uncomment:..." commands,
+    .replace(/\/\/ uncomment:/g, '')
+    // replace NUMBER_OF_AVAILABILITY_TOPICS,
+    .replace(/NUMBER_OF_AVAILABILITY_TOPICS/g, (device.availability !== false) ? device.features.length : 0)
+    // replace CODE_NAME,
+    .replace(/CODE_NAME/g, toCodeName(device.name))
+    // replace NAME,
+    .replace(/NAME/g, device.name)
+
+outputHeader += '\n\n'
+
+/**
+ *
+ * @param {{
+ *      class: "binary_sensor" |
+ *             "button" |
+ *             "light" |
+ *             "sensor" |
+ *             "switch"
+ *      name: string
+ *      unique_id: string
+ *      var_name?: string
+ *      icon?: string
+ *      expire_after?: number
+ *      off_delay?: number
+ *      force_update?: boolean
+ *      unit_of_measurement?: string
+ *      effect_list?: string | string[]
+ *      brightness?: boolean
+ *      temperature?: boolean
+ *      rgb?: boolean
+ *      max_mireds?: number
+ *      min_mireds?: number
+ * }} feature
+ * @param {{
+ *      name: string
+ *      unique_id: string
+ *      icon?: string
+ *      expire_after?: number
+ *      off_delay?: number
+ *      force_update?: boolean
+ *      unit_of_measurement?: string
+ *      effect_list?: string | string[]
+ *      availability_topic?: string
+ *      state_topic?: string
+ *      command_topic?: string
+ *      brightness_command_topic?: string
+ *      brightness_state_topic?: string
+ *      color_temp_command_topic?: string
+ *      color_temp_state_topic?: string
+ *      rgb_command_topic?: string
+ *      rgb_state_topic?: string
+ *      effect_command_topic?: string
+ *      effect_state_topic?: string
+ *      max_mireds?: number
+ *      min_mireds?: number
+ *      device: {
+ *          name: string
+ *          model?: string
+ *          manufacturer?: string
+ *          suggested_area?: string
+ *          sw_version?: string
+ *          identifiers: string | string[]
+ *      }
+ * }} jsonFeature
+ *
+ * @returns {string | null}
+ */
+function processFeature(feature, jsonFeature) {
+    let component
+    switch (feature.class) {
+        case 'button':
+            component = buttonComponent
+            break
+        default: return null
+    }
+
+    // remove the part before the start identifier,
+    component = component.slice(component.indexOf(startIdentifier) + startIdentifier.length)
+        // uncomment all "// uncomment:..." commands,
+        .replace(/\/\/ uncomment:/g, '')
+        // replace COMMAND_TOPIC,
+        .replace(/COMMAND_TOPIC/g, jsonFeature.command_topic.replace('~', jsonFeature['~']))
+        // replace VAR_NAME,
+        .replace(/VAR_NAME/g, feature.var_name ?? toCodeName(jsonFeature.name).replace(/-/g, '_'))
+        // replace NAME,
+        .replace(/NAME/g, jsonFeature.name)
+        + '\n'
+
+    return component
+}
+
+console.log(device)
+
+device.features.forEach((feature, index) => {
+    haMqttJsonFeatures[index] = {}
+    const haMqtt = haMqttJsonFeatures[index]
+
+    haMqtt['~'] = `${discoveryPrefix}/${feature.class}/${feature.unique_id}`
+    haMqtt.name = feature.name
+    haMqtt.unique_id = feature.unique_id
+    haMqtt.icon = feature.icon
+    haMqtt.device = {
+        manufacturer: device.manufacturer,
+        model: device.model,
+        name: device.name,
+        suggested_area: device.suggested_area,
+        sw_version: device.sw_version,
+        identifiers: device.identifiers
+    }
+
+    if (device.availability !== false) {
+        haMqtt.availability_topic = `~/availability`
+    }
+
+    switch (feature.class) {
+        case 'binary_sensor':
+            haMqtt.expire_after = feature.expire_after
+            haMqtt.force_update = feature.force_update
+            haMqtt.off_delay = feature.off_delay
+            haMqtt.state_topic = `~/state`
+            break
+        case 'button':
+            haMqtt.command_topic = `~/command`
+            break
+        case 'light':
+            haMqtt.command_topic = `~/command`
+            haMqtt.state_topic = `~/state`
+            if (feature.brightness) {
+                haMqtt.brightness_command_topic = `~/brightness_command`
+                haMqtt.brightness_state_topic = `~/brightness_state`
+            }
+            if (feature.temperature) {
+                haMqtt.color_temp_command_topic = `~/temperature_command`
+                haMqtt.color_temp_state_topic = `~/temperature_state`
+                haMqtt.max_mireds = feature.max_mireds
+                haMqtt.min_mireds = feature.min_mireds
+            }
+            if (feature.rgb) {
+                haMqtt.rgb_command_topic = `~/rgb_command`
+                haMqtt.rgb_state_topic = `~/rgb_state`
+            }
+            if (feature.effect_list) {
+                haMqtt.effect_command_topic = `~/effect_command`
+                haMqtt.effect_state_topic = `~/effect_state`
+            }
+            break
+        case 'sensor':
+            haMqtt.expire_after = feature.expire_after
+            haMqtt.force_update = feature.force_update
+            haMqtt.unit_of_measurement = feature.unit_of_measurement
+            haMqtt.state_topic = `~/state`
+            break
+        case 'switch':
+            haMqtt.command_topic = `~/command`
+            haMqtt.state_topic = `~/state`
+            break
+        default: break
+    }
+
+    outputHeader += processFeature(feature, haMqtt)
+    outputHeader += '\n'
+})
+
+// insert availability topics
+outputHeader = outputHeader.replace('// __insert-availability_topics\r\n', haMqttJsonFeatures.filter(jsonFeature => jsonFeature.availability_topic !== undefined).map(jsonFeature => `"${jsonFeature.availability_topic.replace('~', jsonFeature['~'])}"`).join(',\n') + '\n')
+
+// insert discovery publish
+outputHeader = outputHeader.replace('// __insert-discovery-publish\r\n', haMqttJsonFeatures.map(jsonFeature => `client.publish("${jsonFeature['~']}/config", R"=-=-=(${JSON.stringify(jsonFeature)})=-=-=");`).join(',\n') + '\n')
+
+fs.writeFileSync('include/ha-device.h', outputHeader)
+
+if (fs.existsSync('platformio.ini')) {
+    const iniFile = fs.readFileSync('platformio.ini').toString()
+    if (!iniFile.includes('upload_port = ')) {
+        fs.appendFileSync('platformio.ini', `upload_port = ${toCodeName(device.name)}.local\n`)
+    }
+}

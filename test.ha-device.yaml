@@ -1,0 +1,10 @@
+name: Lights
+manufacturer: espressif
+model: esp32
+suggested_area: Bedroom
+sw_version: 0.0.1
+identifiers: ntq324weoi7fhydu
+features:
+  - class: button
+    name: My Button
+    unique_id: my-button-1

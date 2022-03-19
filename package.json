@@ -1,0 +1,14 @@
+{
+  "name": "ha-device-builder",
+  "version": "0.0.1",
+  "description": "A node script that generates esp-ready cpp headers for home assistant MQTT integration",
+  "main": "ha-device-builder.js",
+  "scripts": {
+    "test": "node ha-device-builder.js test.ha-device.yaml"
+  },
+  "author": "KhanKudo",
+  "license": "ISC",
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}
