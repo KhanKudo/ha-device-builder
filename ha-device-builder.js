@@ -84,7 +84,10 @@ let buttonComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/c
  */
 let switchComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/components/switch.h').toString()
 
-const deviceCodeName = toCodeName(device.name)
+/**
+ * @type {string}
+ */
+let binarySensorComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/components/binary_sensor.h').toString()
 
 const discoveryPrefix = 'homeassistant'
 /**
@@ -215,6 +218,9 @@ function processFeature(feature, jsonFeature) {
             break
         case 'switch':
             component = switchComponent
+            break
+        case 'binary_sensor':
+            component = binarySensorComponent
             break
         default: return null
     }
