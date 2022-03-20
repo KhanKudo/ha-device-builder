@@ -4,9 +4,9 @@
 class _VAR_NAME
 {
 private:
-    String name = "NAME";
+    const String name = "NAME";
 
-    String commandTopic = "COMMAND_TOPIC";
+    const String commandTopic = "COMMAND_TOPIC";
 
     std::function<void(void)> listener = []() {};
 

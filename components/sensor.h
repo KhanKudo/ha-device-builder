@@ -21,8 +21,8 @@ public:
         }
     }
 
-    void update(bool newState)
+    void update(String newState)
     {
-        manager.publish(stateTopic.c_str(), newState ? "ON" : "OFF", retain);
+        manager.publish(stateTopic.c_str(), newState.c_str(), retain);
     }
 } VAR_NAME;

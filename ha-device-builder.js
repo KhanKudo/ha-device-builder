@@ -70,24 +70,13 @@ function toCodeName(name) {
 }
 
 /**
- * @type {string}
+ * @type {[key: string]: string}
  */
-let managerComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/components/manager.h').toString()
+const components = {}
 
-/**
- * @type {string}
- */
-let buttonComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/components/button.h').toString()
-
-/**
- * @type {string}
- */
-let switchComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/components/switch.h').toString()
-
-/**
- * @type {string}
- */
-let binarySensorComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/components/binary_sensor.h').toString()
+for (const fileName of fs.readdirSync(`${__dirname}/components/`)) {
+    components[fileName.slice(0, -2)] = fs.readFileSync(`${__dirname}/components/${fileName}`).toString()
+}
 
 const discoveryPrefix = 'homeassistant'
 /**
@@ -140,7 +129,7 @@ const startIdentifier = '// start\r\n'
 const availabilityTopic = (device.availability !== false) ? `home/${toCodeName(device.name)}/availability` : null
 
 // remove the part before the start identifier,
-outputHeader += managerComponent.slice(managerComponent.indexOf(startIdentifier) + startIdentifier.length)
+outputHeader += components['manager'].slice(components['manager'].indexOf(startIdentifier) + startIdentifier.length)
     // uncomment all "// uncomment:..." commands,
     .replace(/\/\/ uncomment:/g, '')
     // replace AVAILABILITY_TOPIC,
@@ -211,19 +200,7 @@ outputHeader += '\n\n'
  * @returns {string | null}
  */
 function processFeature(feature, jsonFeature) {
-    let component
-    switch (feature.class) {
-        case 'button':
-            component = buttonComponent
-            break
-        case 'switch':
-            component = switchComponent
-            break
-        case 'binary_sensor':
-            component = binarySensorComponent
-            break
-        default: return null
-    }
+    let component = components[feature.class]
 
     // remove the part before the start identifier,
     component = component.slice(component.indexOf(startIdentifier) + startIdentifier.length)

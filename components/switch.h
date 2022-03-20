@@ -6,12 +6,12 @@
 class _VAR_NAME
 {
 private:
-    String name = "NAME";
+    const String name = "NAME";
 
-    String commandTopic = "COMMAND_TOPIC";
-    String stateTopic = "STATE_TOPIC";
+    const String commandTopic = "COMMAND_TOPIC";
+    const String stateTopic = "STATE_TOPIC";
 
-    bool retain = RETAIN;
+    const bool retain = RETAIN;
 
     std::function<void(bool)> listener = [](bool) {};
 
