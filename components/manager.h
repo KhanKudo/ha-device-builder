@@ -1,58 +1,9 @@
-#define String char *
-#define IPAddress char *
-#define byte char
 #define NUMBER_OF_AVAILABILITY_TOPICS 1
-
-class WiFiClient
-{
-    WiFiClient()
-    {
-    }
-};
-
-class PubSubClient
-{
-public:
-    PubSubClient() {}
-    PubSubClient(WiFiClient wifiClient) {}
-
-    void publish(String topic, String message) {}
-    void subscribe(String topic) {}
-    bool connect(String id, String user, String pass) { return false; }
-    bool connected() { return false; }
-    void loop() {}
-    void setServer(IPAddress, int) {}
-    void setCallback(std::function<void(char *, byte *, unsigned int)>) {}
-    void setBufferSize(unsigned int) {}
-};
-
-void delay(int ms)
-{
-}
-
-struct
-{
-    void restart() {}
-} ESP;
-
-struct
-{
-    void hostByName(String hostname, IPAddress destinationIP) {}
-    void begin(String ssid, String password) {}
-    bool isConnected() { return false; }
-} WiFi;
-
-struct
-{
-    String c_str() { return ""; }
-} codeName;
-
-#define WAN_DEPLOYMENT
-
 // start
-// uncomment:#include <Arduino.h>
-// uncomment:#include <ArduinoOTA.h>
-// uncomment:#include <PubSubClient.h>
+#include <Arduino.h>
+#include <ArduinoOTA.h>
+#include <PubSubClient.h>
+
 #include <functional>
 #include <map>
 
@@ -70,7 +21,7 @@ struct
 {
 private:
     String name = "NAME";
-    // uncomment:String codeName = "CODE_NAME";
+    String codeName = "CODE_NAME";
 
     std::function<void(void)> listener = []() {};
 
@@ -79,9 +30,7 @@ private:
     WiFiClient wifiClient;
     PubSubClient client = PubSubClient(wifiClient);
 
-    String availabilityTopics[NUMBER_OF_AVAILABILITY_TOPICS] = {
-        // __insert-availability_topics
-    };
+    String availabilityTopic = "AVAILABILITY_TOPIC";
 
     std::function<void(char *, byte *, unsigned int)> callback = [this](char *char_topic, byte *payload, unsigned int length)
     {
@@ -100,7 +49,16 @@ private:
     {
         while (!client.connected())
         {
-            if (!client.connect(codeName.c_str(), "user-iEQFaFF3N9afa7EkVVv9qTdSjdBLavsxizbr3hGo9eHEWHVqiq8dBdshtvQEL7kGwR6R3jEuh5Scnf7YmZzS4UbsAjqnsdyLio3L8XbHfB9Hqfbm8Q8PTxTRAzm76tH2", "w9NHNkrpKwUEeGm9uSE9mH33ci97oQhBrfnjsZb78wEqq7bsnCZkxCcyzJeF6k3u8pedwiHERerCcCaC6NE7oQt9vpEPrpYDLPeQA6QFq8AsKYKBUdCkWFvycAJ5kpdi"))
+            if ((availabilityTopic == "" && !client.connect(codeName.c_str(),
+                                                            "user-iEQFaFF3N9afa7EkVVv9qTdSjdBLavsxizbr3hGo9eHEWHVqiq8dBdshtvQEL7kGwR6R3jEuh5Scnf7YmZzS4UbsAjqnsdyLio3L8XbHfB9Hqfbm8Q8PTxTRAzm76tH2",
+                                                            "w9NHNkrpKwUEeGm9uSE9mH33ci97oQhBrfnjsZb78wEqq7bsnCZkxCcyzJeF6k3u8pedwiHERerCcCaC6NE7oQt9vpEPrpYDLPeQA6QFq8AsKYKBUdCkWFvycAJ5kpdi")) ||
+                !client.connect(codeName.c_str(),
+                                "user-iEQFaFF3N9afa7EkVVv9qTdSjdBLavsxizbr3hGo9eHEWHVqiq8dBdshtvQEL7kGwR6R3jEuh5Scnf7YmZzS4UbsAjqnsdyLio3L8XbHfB9Hqfbm8Q8PTxTRAzm76tH2",
+                                "w9NHNkrpKwUEeGm9uSE9mH33ci97oQhBrfnjsZb78wEqq7bsnCZkxCcyzJeF6k3u8pedwiHERerCcCaC6NE7oQt9vpEPrpYDLPeQA6QFq8AsKYKBUdCkWFvycAJ5kpdi",
+                                availabilityTopic.c_str(),
+                                0,
+                                true,
+                                "offline"))
             {
                 delay(5000);
                 ESP.restart();
@@ -114,7 +72,12 @@ private:
     {
         for (auto it = listeners.cbegin(); it != listeners.cend(); it++)
         {
-            // uncomment:client.subscribe(it->first.c_str());
+            client.subscribe(it->first.c_str());
+        }
+
+        if (availabilityTopic != "")
+        {
+            client.publish(availabilityTopic.c_str(), "online");
         }
     }
 
@@ -125,7 +88,7 @@ public:
     Timezone time;
 #endif
 
-    void init(char *ssid = "wifi-user", char *password = "wifi-pass")
+    void init(const char *ssid = "wifi-user", const char *password = "wifi-pass")
     {
         WiFi.begin(ssid, password);
 
@@ -150,8 +113,8 @@ public:
         client.setBufferSize(511);
 
         reconnect();
-        // uncomment:ArduinoOTA.setHostname(codeName.c_str());
-        // uncomment:ArduinoOTA.begin();
+        ArduinoOTA.setHostname(codeName.c_str());
+        ArduinoOTA.begin();
 
         // __insert-discovery-publish
     }
@@ -163,7 +126,7 @@ public:
             reconnect();
         }
         client.loop();
-        // uncomment:ArduinoOTA.handle();
+        ArduinoOTA.handle();
 #ifdef TIME
         events();
 #endif
@@ -171,6 +134,6 @@ public:
 
     void subscribe(char *topic, std::function<void(String)> listener)
     {
-        // uncomment:listeners.insert(std::pair<String, std::function<void(String)>>(String(topic), listener));
+        listeners.insert(std::pair<String, std::function<void(String)>>(String(topic), listener));
     }
 } manager;

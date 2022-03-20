@@ -1,6 +1,3 @@
-#define String char *
-
-#include <functional>
 #include "manager.h"
 
 // start
@@ -16,8 +13,8 @@ private:
 public:
     _Button()
     {
-        // uncomment:manager.subscribe((char *)commandTopic.c_str(), [this](String message)
-        // uncomment:                  { listener(); });
+        manager.subscribe((char *)commandTopic.c_str(), [this](String message)
+                          { listener(); });
     }
 
     // only one listener will work, newest overwrites previous

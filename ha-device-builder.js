@@ -1,3 +1,4 @@
+const dns = require('dns')
 const fs = require('fs')
 
 const haDeviceFilePath = process.argv[2]
@@ -16,6 +17,7 @@ const yaml = require('js-yaml')
  *  suggested_area?: string
  *  sw_version?: string
  *  availability?: boolean
+ *  retain?: boolean
  *  wan_deployment?: boolean
  *  identifiers: string | string[]
  *  features?: {
@@ -26,6 +28,7 @@ const yaml = require('js-yaml')
  *             "switch"
  *      name: string
  *      unique_id: string
+ *      retain?: boolean
  *      var_name?: string
  *      icon?: string
  *      expire_after?: number
@@ -83,6 +86,7 @@ const discoveryPrefix = 'homeassistant'
  * @type {{
  *      name: string
  *      unique_id: string
+ *      retain: boolean
  *      icon?: string
  *      expire_after?: number
  *      off_delay?: number
@@ -108,6 +112,7 @@ const discoveryPrefix = 'homeassistant'
  *          manufacturer?: string
  *          suggested_area?: string
  *          sw_version?: string
+ *          identifiers?: string | string[]
  *      }
  * }[]}
  */
@@ -121,12 +126,17 @@ if (device.wan_deployment === true) {
 
 const startIdentifier = '// start\r\n'
 
+/**
+ * @type {string | null}
+ */
+const availabilityTopic = (device.availability !== false) ? `home/${toCodeName(device.name)}/availability` : null
+
 // remove the part before the start identifier,
 outputHeader += managerComponent.slice(managerComponent.indexOf(startIdentifier) + startIdentifier.length)
     // uncomment all "// uncomment:..." commands,
     .replace(/\/\/ uncomment:/g, '')
-    // replace NUMBER_OF_AVAILABILITY_TOPICS,
-    .replace(/NUMBER_OF_AVAILABILITY_TOPICS/g, (device.availability !== false) ? device.features.length : 0)
+    // replace AVAILABILITY_TOPIC,
+    .replace(/AVAILABILITY_TOPIC/g, availabilityTopic ?? '')
     // replace CODE_NAME,
     .replace(/CODE_NAME/g, toCodeName(device.name))
     // replace NAME,
@@ -234,8 +244,8 @@ device.features.forEach((feature, index) => {
         identifiers: device.identifiers
     }
 
-    if (device.availability !== false) {
-        haMqtt.availability_topic = `~/availability`
+    if (availabilityTopic !== null) {
+        haMqtt.availability_topic = availabilityTopic
     }
 
     switch (feature.class) {
@@ -287,17 +297,27 @@ device.features.forEach((feature, index) => {
     outputHeader += '\n'
 })
 
-// insert availability topics
-outputHeader = outputHeader.replace('// __insert-availability_topics\r\n', haMqttJsonFeatures.filter(jsonFeature => jsonFeature.availability_topic !== undefined).map(jsonFeature => `"${jsonFeature.availability_topic.replace('~', jsonFeature['~'])}"`).join(',\n') + '\n')
-
 // insert discovery publish
 outputHeader = outputHeader.replace('// __insert-discovery-publish\r\n', haMqttJsonFeatures.map(jsonFeature => `client.publish("${jsonFeature['~']}/config", R"=-=-=(${JSON.stringify(jsonFeature)})=-=-=");`).join(',\n') + '\n')
 
+// write the output file
 fs.writeFileSync('include/ha-device.h', outputHeader)
 
+// add the ArduinoOTA upload port to platformio.ini, if not already present
 if (fs.existsSync('platformio.ini')) {
     const iniFile = fs.readFileSync('platformio.ini').toString()
-    if (!iniFile.includes('upload_port = ')) {
-        fs.appendFileSync('platformio.ini', `upload_port = ${toCodeName(device.name)}.local\n`)
-    }
+    const host = `${toCodeName(device.name)}.local`
+    // check if hostname is active, otherwise don't add it, may be the initial upload, so the device has a blank project, no ArduinoOTA
+    dns.lookup(host, 4, (err, address) => {
+        if (err) return
+
+        // if there is no upload_port, then just append one to the end of the file
+        if (!iniFile.includes('upload_port = ')) {
+            fs.appendFileSync('platformio.ini', `upload_port = ${host}\n`)
+        }
+        // if there is an upload_port already present, then check if it's the same as the currectly suggested one, if so, don't do anything, otherwise overwrite it
+        else if (!iniFile.includes(`upload_port = ${host}`)) {
+            fs.writeFileSync('platformio.ini', iniFile.split('\n').map(line => line.includes('upload_port = ') ? `upload_port = ${host}` : line).join('\n'))
+        }
+    })
 }
