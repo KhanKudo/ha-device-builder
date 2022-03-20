@@ -1,7 +1,7 @@
 #include "manager.h"
 
 // start
-class _Button
+class _VAR_NAME
 {
 private:
     String name = "NAME";
@@ -11,10 +11,13 @@ private:
     std::function<void(void)> listener = []() {};
 
 public:
-    _Button()
+    _VAR_NAME()
     {
-        manager.subscribe((char *)commandTopic.c_str(), [this](String message)
-                          { listener(); });
+        manager.clearRetain(commandTopic.c_str());
+        manager.subscribe(commandTopic.c_str(), [this](String message)
+                          {
+                            if(message != "PRESS") return;
+                            listener(); });
     }
 
     // only one listener will work, newest overwrites previous

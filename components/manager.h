@@ -77,7 +77,7 @@ private:
 
         if (availabilityTopic != "")
         {
-            client.publish(availabilityTopic.c_str(), "online");
+            client.publish(availabilityTopic.c_str(), "online", true);
         }
     }
 
@@ -132,8 +132,18 @@ public:
 #endif
     }
 
-    void subscribe(char *topic, std::function<void(String)> listener)
+    void subscribe(const char *topic, std::function<void(String)> listener)
     {
         listeners.insert(std::pair<String, std::function<void(String)>>(String(topic), listener));
+    }
+
+    void publish(const char *topic, const char *message, bool retain = false)
+    {
+        client.publish(topic, message, retain);
+    }
+
+    void clearRetain(const char *topic)
+    {
+        client.publish(topic, "", true);
     }
 } manager;

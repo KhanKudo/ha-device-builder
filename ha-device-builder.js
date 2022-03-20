@@ -79,6 +79,11 @@ let managerComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/
  */
 let buttonComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/components/button.h').toString()
 
+/**
+ * @type {string}
+ */
+let switchComponent = fs.readFileSync('C:/dev/Home Assistant/ha-device-builder/components/switch.h').toString()
+
 const deviceCodeName = toCodeName(device.name)
 
 const discoveryPrefix = 'homeassistant'
@@ -154,6 +159,7 @@ outputHeader += '\n\n'
  *             "switch"
  *      name: string
  *      unique_id: string
+ *      retain: boolean
  *      var_name?: string
  *      icon?: string
  *      expire_after?: number
@@ -207,6 +213,9 @@ function processFeature(feature, jsonFeature) {
         case 'button':
             component = buttonComponent
             break
+        case 'switch':
+            component = switchComponent
+            break
         default: return null
     }
 
@@ -215,17 +224,19 @@ function processFeature(feature, jsonFeature) {
         // uncomment all "// uncomment:..." commands,
         .replace(/\/\/ uncomment:/g, '')
         // replace COMMAND_TOPIC,
-        .replace(/COMMAND_TOPIC/g, jsonFeature.command_topic.replace('~', jsonFeature['~']))
+        .replace(/COMMAND_TOPIC/g, jsonFeature.command_topic?.replace('~', jsonFeature['~']) ?? '')
+        // replace STATE_TOPIC,
+        .replace(/STATE_TOPIC/g, jsonFeature.state_topic?.replace('~', jsonFeature['~']) ?? '')
         // replace VAR_NAME,
         .replace(/VAR_NAME/g, feature.var_name ?? toCodeName(jsonFeature.name).replace(/-/g, '_'))
+        // replace RETAIN,
+        .replace(/RETAIN/g, jsonFeature.retain)
         // replace NAME,
         .replace(/NAME/g, jsonFeature.name)
         + '\n'
 
     return component
 }
-
-console.log(device)
 
 device.features.forEach((feature, index) => {
     haMqttJsonFeatures[index] = {}
@@ -235,6 +246,7 @@ device.features.forEach((feature, index) => {
     haMqtt.name = feature.name
     haMqtt.unique_id = feature.unique_id
     haMqtt.icon = feature.icon
+    haMqtt.retain = feature.retain ?? device.retain ?? true
     haMqtt.device = {
         manufacturer: device.manufacturer,
         model: device.model,
@@ -257,6 +269,7 @@ device.features.forEach((feature, index) => {
             break
         case 'button':
             haMqtt.command_topic = `~/command`
+            haMqtt.retain = false
             break
         case 'light':
             haMqtt.command_topic = `~/command`
@@ -298,7 +311,7 @@ device.features.forEach((feature, index) => {
 })
 
 // insert discovery publish
-outputHeader = outputHeader.replace('// __insert-discovery-publish\r\n', haMqttJsonFeatures.map(jsonFeature => `client.publish("${jsonFeature['~']}/config", R"=-=-=(${JSON.stringify(jsonFeature)})=-=-=");`).join(',\n') + '\n')
+outputHeader = outputHeader.replace('// __insert-discovery-publish\r\n', haMqttJsonFeatures.map(jsonFeature => `client.publish("${jsonFeature['~']}/config", R"=-=-=(${JSON.stringify(jsonFeature)})=-=-=");`).join('\n\t\t') + '\n')
 
 // write the output file
 fs.writeFileSync('include/ha-device.h', outputHeader)
