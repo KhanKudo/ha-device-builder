@@ -289,6 +289,12 @@ function processFeature(feature, jsonFeature) {
     component = component.slice(component.indexOf(startIdentifier) + startIdentifier.length)
         // uncomment all "// uncomment:..." commands,
         .replace(/\/\/ uncomment:/g, '')
+        // insert effect-list-enum,
+        .replace('// __insert-effect-list-enum\r\n', (feature.effect_list?.length ?? 0) > 0 ? feature.effect_list.map(effect => effect.replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '')).join(',\n\t\t') + '\n' : '')
+        // insert effect-list,
+        .replace('// __insert-effect-list\r\n', (feature.effect_list?.length ?? 0) > 0 ? feature.effect_list.map(effect => `"${effect}"`).join(',\n\t\t') + '\n' : '')
+        // replace NUMBER_OF_EFFECTS,
+        .replace(/NUMBER_OF_EFFECTS/g, feature.effect_list?.length ?? 0)
         // replace COMMAND_TOPIC,
         .replace(/COMMAND_TOPIC/g, jsonFeature.command_topic?.replace('~', jsonFeature['~']) ?? '')
         // replace STATE_TOPIC,

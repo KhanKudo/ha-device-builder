@@ -2,6 +2,7 @@
 #include <Arduino.h>
 
 #define RETAIN false
+#define NUMBER_OF_EFFECTS 0
 
 // start
 
@@ -117,6 +118,17 @@ private:
     std::function<void(XY)> xy_listener = [](XY) {};
     // end-if xy_supported
 
+    // start-if effects_supported
+public:
+    enum Effect {
+        // __insert-effect-list-enum
+    };
+
+private:
+    Effect effect;
+    std::function<void(Effect)> effect_listener = [](Effect) {};
+    // end-if effects_supported
+
 public:
     _VAR_NAME()
     {
@@ -196,6 +208,13 @@ public:
                             }
                             // end-if xy_supported
 
+                            // start-if effects_supported
+                            if(jsonMsg.containsKey("effect")){
+                                effect = stringToEffect(jsonMsg["effect"]);
+                                jsonState["effect"] = jsonMsg["effect"];
+                            }
+                            // end-if effects_supported
+
                             if(jsonMsg.containsKey("state")){
                                 state_listener(state);
                             }
@@ -241,6 +260,12 @@ public:
                                 xy_listener(xy);
                             }
                             // end-if xy_supported
+
+                            // start-if effects_supported
+                            if(jsonMsg.containsKey("effect")){
+                                effect_listener(effect);
+                            }
+                            // end-if effects_supported
 
                             char responseMsg[512];
                             serializeJson(jsonState, responseMsg, 512);
@@ -493,4 +518,57 @@ public:
         xy_listener = _listener;
     }
     // end-if xy_supported
+
+    // start-if effects_supported
+
+    const String effect_list[NUMBER_OF_EFFECTS] = {
+        // __insert-effect-list
+    };
+
+    Effect getEffect()
+    {
+        return effect;
+    }
+
+    String effectToString(Effect effect)
+    {
+        return effect_list[effect];
+    }
+
+    Effect stringToEffect(String str_effect)
+    {
+        for (int i = 0; i < NUMBER_OF_EFFECTS; i++)
+        {
+            if (effect_list[i].equals(str_effect))
+            {
+                return (Effect)i;
+            }
+        }
+
+        Serial.println("Invalid stringToEffect value: " + str_effect);
+
+        delay(5000);
+        while (1)
+            ;
+    }
+
+    void setEffect(Effect _effect)
+    {
+        StaticJsonDocument<96> jsonDoc;
+        jsonDoc["state"] = "ON";
+
+        jsonDoc["effect"] = effectToString(_effect);
+
+        char message[96];
+        serializeJson(jsonDoc, message, 96);
+        jsonDoc.clear();
+        device.publish(commandTopic.c_str(), message, retain);
+    }
+
+    // only one listener will work, newest overwrites previous
+    void onEffect(std::function<void(Effect)> _listener)
+    {
+        effect_listener = _listener;
+    }
+    // end-if effects_supported
 } VAR_NAME;
