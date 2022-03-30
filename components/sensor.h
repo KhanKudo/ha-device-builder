@@ -17,12 +17,12 @@ public:
     {
         if (!retain)
         {
-            manager.clearRetain(stateTopic.c_str());
+            device.clearRetain(stateTopic.c_str());
         }
     }
 
     void update(String newState)
     {
-        manager.publish(stateTopic.c_str(), newState.c_str(), retain);
+        device.publish(stateTopic.c_str(), newState.c_str(), retain);
     }
 } VAR_NAME;

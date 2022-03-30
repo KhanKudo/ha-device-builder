@@ -13,8 +13,8 @@ private:
 public:
     _VAR_NAME()
     {
-        manager.clearRetain(commandTopic.c_str());
-        manager.subscribe(commandTopic.c_str(), [this](String message)
+        device.clearRetain(commandTopic.c_str());
+        device.subscribe(commandTopic.c_str(), [this](String message)
                           {
                             if(message != "PRESS") return;
                             listener(); });

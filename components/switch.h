@@ -22,16 +22,16 @@ public:
     {
         if (!retain)
         {
-            manager.clearRetain(commandTopic.c_str());
-            manager.clearRetain(stateTopic.c_str());
+            device.clearRetain(commandTopic.c_str());
+            device.clearRetain(stateTopic.c_str());
         }
 
-        manager.subscribe(commandTopic.c_str(), [this](String message)
-                          {
+        device.subscribe(commandTopic.c_str(), [this](String message)
+                         {
                             if(message != "ON" && message != "OFF") return;
 
-                            listener(message == "ON");
-                            setState(message == "ON"); });
+                            state = message == "ON";
+                            listener(message == "ON"); });
     }
 
     bool getState()
@@ -41,8 +41,7 @@ public:
 
     void setState(bool newState)
     {
-        state = newState;
-        manager.publish(stateTopic.c_str(), newState ? "ON" : "OFF", retain);
+        device.publish(commandTopic.c_str(), newState ? "ON" : "OFF", retain);
     }
 
     // only one listener will work, newest overwrites previous

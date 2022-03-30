@@ -1,4 +1,3 @@
-#define NUMBER_OF_AVAILABILITY_TOPICS 1
 // start
 #include <Arduino.h>
 #include <ArduinoOTA.h>
@@ -17,7 +16,7 @@
 #include <ezTime.h>
 #endif
 
-struct
+struct _HA_DEVICE
 {
 private:
     String name = "NAME";
@@ -102,15 +101,11 @@ public:
         time.setLocation("Europe/Vienna");
 #endif
 
-#ifdef WAN_DEPLOYMENT
-        WiFi.hostByName("milenkovic.ddns.net", mqttBrokerIP);
-#else
-        mqttBrokerIP = IPAddress(192, 168, 0, 51);
-#endif
+        WiFi.hostByName("example.com", mqttBrokerIP);
         client.setServer(mqttBrokerIP, 1883);
         client.setCallback(callback);
 
-        client.setBufferSize(511);
+        client.setBufferSize(1023);
 
         reconnect();
         ArduinoOTA.setHostname(codeName.c_str());
@@ -146,4 +141,4 @@ public:
     {
         client.publish(topic, "", true);
     }
-} manager;
+} device;

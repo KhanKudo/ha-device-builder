@@ -18,7 +18,6 @@ const yaml = require('js-yaml')
  *  sw_version?: string
  *  availability?: boolean
  *  retain?: boolean
- *  wan_deployment?: boolean
  *  identifiers: string | string[]
  *  features?: {
  *      class: "binary_sensor" |
@@ -37,10 +36,18 @@ const yaml = require('js-yaml')
  *      unit_of_measurement?: string
  *      effect_list?: string | string[]
  *      brightness?: boolean
- *      temperature?: boolean
- *      rgb?: boolean
  *      max_mireds?: number
  *      min_mireds?: number
+ *      flash_time_long?: number
+ *      flash_time_short?: number
+ *      mode?: "onoff" |
+ *                   "brightness" |
+ *                   "color_temp" |
+ *                   "hs" |
+ *                   "xy" |
+ *                   "rgb" |
+ *                   "rgbw" |
+ *                   "rgbww"
  * }[]
  * }}
 //  *  "-WIP-alarm_control_panel" |
@@ -93,16 +100,14 @@ const discoveryPrefix = 'homeassistant'
  *      availability_topic?: string
  *      state_topic?: string
  *      command_topic?: string
- *      brightness_command_topic?: string
- *      brightness_state_topic?: string
- *      color_temp_command_topic?: string
- *      color_temp_state_topic?: string
- *      rgb_command_topic?: string
- *      rgb_state_topic?: string
- *      effect_command_topic?: string
- *      effect_state_topic?: string
  *      max_mireds?: number
  *      min_mireds?: number
+ *      flash_time_long?: number
+ *      flash_time_short?: number
+ *      brightness?: boolean
+ *      mode?: boolean
+ *      supported_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
+ *      schema?: 'json'
  *      device: {
  *          name: string
  *          model?: string
@@ -116,10 +121,6 @@ const discoveryPrefix = 'homeassistant'
 const haMqttJsonFeatures = []
 
 let outputHeader = ''
-
-if (device.wan_deployment === true) {
-    outputHeader += '#define WAN_DEPLOYMENT\n'
-}
 
 const startIdentifier = '// start\r\n'
 
@@ -159,11 +160,18 @@ outputHeader += '\n\n'
  *      force_update?: boolean
  *      unit_of_measurement?: string
  *      effect_list?: string | string[]
- *      brightness?: boolean
- *      temperature?: boolean
- *      rgb?: boolean
  *      max_mireds?: number
  *      min_mireds?: number
+ *      flash_time_long?: number
+ *      flash_time_short?: number
+ *      mode?: "onoff" |
+ *                   "brightness" |
+ *                   "color_temp" |
+ *                   "hs" |
+ *                   "xy" |
+ *                   "rgb" |
+ *                   "rgbw" |
+ *                   "rgbww"
  * }} feature
  * @param {{
  *      name: string
@@ -177,16 +185,14 @@ outputHeader += '\n\n'
  *      availability_topic?: string
  *      state_topic?: string
  *      command_topic?: string
- *      brightness_command_topic?: string
- *      brightness_state_topic?: string
- *      color_temp_command_topic?: string
- *      color_temp_state_topic?: string
- *      rgb_command_topic?: string
- *      rgb_state_topic?: string
- *      effect_command_topic?: string
- *      effect_state_topic?: string
+ *      flash_time_long?: number
+ *      flash_time_short?: number
+ *      brightness?: boolean
+ *      mode?: boolean
+ *      supported_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
  *      max_mireds?: number
  *      min_mireds?: number
+ *      schema?: 'json'
  *      device: {
  *          name: string
  *          model?: string
@@ -200,7 +206,79 @@ outputHeader += '\n\n'
  * @returns {string | null}
  */
 function processFeature(feature, jsonFeature) {
+    /**
+     * @type {string}
+     */
     let component = components[feature.class]
+
+    // process if conditions
+
+    /**
+     * @type {string[]}
+     */
+    let componentLines = component.split('\n')
+
+    /**
+     * @type {{condition: string, result: boolean}[]}
+     */
+    let conditionResultList = []
+
+    componentLines.filter(line => line.includes('// start-if ')).forEach(line => {
+        /**
+         * @type {boolean}
+         */
+        let conditionResult
+
+        const condition = line.slice(line.indexOf('// start-if ') + '// start-if '.length).trimEnd()
+
+        switch (condition) {
+            case 'brightness_supported':
+                conditionResult = jsonFeature.brightness ?? false
+                break
+            case 'color_temp_supported':
+                conditionResult = feature.mode === 'color_temp'
+                break
+            case 'rgb_supported':
+                conditionResult = feature.mode === 'rgb'
+                break
+            case 'rgbw_supported':
+                conditionResult = feature.mode === 'rgbw'
+                break
+            case 'rgbww_supported':
+                conditionResult = feature.mode === 'rgbww'
+                break
+            case 'hs_supported':
+                conditionResult = feature.mode === 'hs'
+                break
+            case 'xy_supported':
+                conditionResult = feature.mode === 'xy'
+                break
+            case 'effects_supported':
+                conditionResult = feature.effect_list !== undefined && feature.effect_list.length > 0
+                break
+            default:
+                throw new Error(`start-if condition invalid, "${condition}"`)
+        }
+
+        conditionResultList.push({ condition, result: conditionResult })
+    })
+
+    for (const { condition, result } of conditionResultList) {
+        const startIndex = componentLines.findIndex(line => line.includes(`// start-if ${condition}`))
+        if (startIndex === -1) continue
+        const endIndex = componentLines.findIndex(line => line.includes(`// end-if ${condition}`))
+        if (endIndex === -1) throw new Error(`incomplete if statement, missing // end-if ${condition}`)
+
+        if (result) {
+            componentLines.splice(endIndex, 1)
+            componentLines.splice(startIndex, 1)
+        }
+        else {
+            componentLines.splice(startIndex, endIndex - startIndex + 1)
+        }
+    }
+
+    component = componentLines.join('\n')
 
     // remove the part before the start identifier,
     component = component.slice(component.indexOf(startIdentifier) + startIdentifier.length)
@@ -257,24 +335,14 @@ device.features.forEach((feature, index) => {
         case 'light':
             haMqtt.command_topic = `~/command`
             haMqtt.state_topic = `~/state`
-            if (feature.brightness) {
-                haMqtt.brightness_command_topic = `~/brightness_command`
-                haMqtt.brightness_state_topic = `~/brightness_state`
-            }
-            if (feature.temperature) {
-                haMqtt.color_temp_command_topic = `~/temperature_command`
-                haMqtt.color_temp_state_topic = `~/temperature_state`
-                haMqtt.max_mireds = feature.max_mireds
-                haMqtt.min_mireds = feature.min_mireds
-            }
-            if (feature.rgb) {
-                haMqtt.rgb_command_topic = `~/rgb_command`
-                haMqtt.rgb_state_topic = `~/rgb_state`
-            }
-            if (feature.effect_list) {
-                haMqtt.effect_command_topic = `~/effect_command`
-                haMqtt.effect_state_topic = `~/effect_state`
-            }
+            haMqtt.schema = 'json'
+            haMqtt.brightness = feature.mode !== undefined && feature.mode !== 'onoff'
+            haMqtt.color_mode = true
+            haMqtt.supported_color_modes = [feature.mode ?? 'onoff']
+            haMqtt.max_mireds = feature.max_mireds
+            haMqtt.min_mireds = feature.min_mireds
+            haMqtt.effect_list = feature.effect_list
+            haMqtt.effect = feature.effect_list !== undefined && feature.effect_list.length > 0
             break
         case 'sensor':
             haMqtt.expire_after = feature.expire_after
@@ -286,7 +354,8 @@ device.features.forEach((feature, index) => {
             haMqtt.command_topic = `~/command`
             haMqtt.state_topic = `~/state`
             break
-        default: break
+        default:
+            throw new Error(`No feature class called "${feature.class}" exists`)
     }
 
     outputHeader += processFeature(feature, haMqtt)
