@@ -244,7 +244,13 @@ public:
 
                             char responseMsg[512];
                             serializeJson(jsonState, responseMsg, 512);
-                            device.publish(stateTopic.c_str(), responseMsg, retain); });
+                            device.publish(stateTopic.c_str(), responseMsg, retain);
+
+                            if(jsonMsg.containsKey("flash")){
+                                device.setTimeout(((uint32_t)jsonMsg["flash"]) * 1000, [this](){
+                                    device.publish(commandTopic.c_str(), "{\"state\":\"OFF\"}", retain);
+                                });
+                            } });
     }
 
     bool getState()

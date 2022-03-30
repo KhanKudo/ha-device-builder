@@ -26,10 +26,14 @@ private:
 
     std::map<String, std::function<void(String)>> listeners;
 
+    std::map<uint32_t, std::function<void(void)>> timeouts;
+
     WiFiClient wifiClient;
     PubSubClient client = PubSubClient(wifiClient);
 
     String availabilityTopic = "AVAILABILITY_TOPIC";
+
+    uint32_t timeoutLoopLimiter = 0;
 
     std::function<void(char *, byte *, unsigned int)> callback = [this](char *char_topic, byte *payload, unsigned int length)
     {
@@ -125,6 +129,28 @@ public:
 #ifdef TIME
         events();
 #endif
+        if (timeouts.size() > 0 && millis() > timeoutLoopLimiter)
+        {
+            uint32_t *passed = new uint32_t(timeouts.size());
+            const uint32_t cur_ms = millis();
+            timeoutLoopLimiter = cur_ms + 100;
+            int count = 0;
+            for (auto it = timeouts.cbegin(); it != timeouts.cend(); ++it)
+            {
+                yield();
+                if (cur_ms > it->first)
+                {
+                    it->second();
+                    passed[count] = it->first;
+                    count++;
+                }
+            }
+
+            while (--count >= 0)
+            {
+                timeouts.erase(passed[count]);
+            }
+        }
     }
 
     void subscribe(const char *topic, std::function<void(String)> listener)
@@ -140,5 +166,11 @@ public:
     void clearRetain(const char *topic)
     {
         client.publish(topic, "", true);
+    }
+
+    // calls the callback after roughly the specified time in ms has passed
+    void setTimeout(uint16_t ms, std::function<void(void)> callback)
+    {
+        timeouts.insert(std::pair<uint32_t, std::function<void(void)>>(millis() + ms, callback));
     }
 } device;

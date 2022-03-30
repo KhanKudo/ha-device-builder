@@ -18,6 +18,7 @@ const yaml = require('js-yaml')
  *  sw_version?: string
  *  availability?: boolean
  *  retain?: boolean
+ *  time?: boolean
  *  identifiers: string | string[]
  *  features?: {
  *      class: "binary_sensor" |
@@ -121,6 +122,10 @@ const discoveryPrefix = 'homeassistant'
 const haMqttJsonFeatures = []
 
 let outputHeader = ''
+
+if (device.time === true) {
+    outputHeader += '#define TIME\n'
+}
 
 const startIdentifier = '// start\r\n'
 
