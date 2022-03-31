@@ -11,7 +11,7 @@
 // start-if rgb_supported
 #ifndef DEF_RGB
 #define DEF_RGB
-struct RGB
+struct Color_RGB
 {
     uint8_t r;
     uint8_t g;
@@ -23,7 +23,7 @@ struct RGB
 // start-if rgbw_supported
 #ifndef DEF_RGBW
 #define DEF_RGBW
-struct RGBW
+struct Color_RGBW
 {
     uint8_t r;
     uint8_t g;
@@ -36,7 +36,7 @@ struct RGBW
 // start-if rgbww_supported
 #ifndef DEF_RGBWW
 #define DEF_RGBWW
-struct RGBWW
+struct Color_RGBWW
 {
     uint8_t r;
     uint8_t g;
@@ -79,6 +79,8 @@ private:
 
     const bool retain = RETAIN;
 
+    bool initialSetup = true;
+
     std::function<void(bool)> state_listener = [](bool) {};
 
     bool state = false;
@@ -94,18 +96,18 @@ private:
     // end-if color_temp_supported
 
     // start-if rgb_supported
-    RGB rgb = {0, 0, 0};
-    std::function<void(RGB)> rgb_listener = [](RGB) {};
+    Color_RGB rgb = {0, 0, 0};
+    std::function<void(Color_RGB)> rgb_listener = [](Color_RGB) {};
     // end-if rgb_supported
 
     // start-if rgbw_supported
-    RGBW rgbw = {0, 0, 0, 0};
-    std::function<void(RGBW)> rgbw_listener = [](RGBW) {};
+    Color_RGBW rgbw = {0, 0, 0, 0};
+    std::function<void(Color_RGBW)> rgbw_listener = [](Color_RGBW) {};
     // end-if rgbw_supported
 
     // start-if rgbww_supported
-    RGBWW rgbww = {0, 0, 0, 0, 0};
-    std::function<void(RGBWW)> rgbww_listener = [](RGBWW) {};
+    Color_RGBWW rgbww = {0, 0, 0, 0, 0};
+    std::function<void(Color_RGBWW)> rgbww_listener = [](Color_RGBWW) {};
     // end-if rgbww_supported
 
     // start-if hs_supported
@@ -120,7 +122,8 @@ private:
 
     // start-if effects_supported
 public:
-    enum Effect {
+    enum Effect
+    {
         // __insert-effect-list-enum
     };
 
@@ -128,6 +131,11 @@ private:
     Effect effect;
     std::function<void(Effect)> effect_listener = [](Effect) {};
     // end-if effects_supported
+
+    StaticJsonDocument<256> jsonMsg;
+
+    StaticJsonDocument<256> jsonState;
+    StaticJsonDocument<256> jsonRetainedCommand;
 
 public:
     _VAR_NAME()
@@ -141,10 +149,9 @@ public:
         device.subscribe(commandTopic.c_str(), [this](String message)
                          {
                             Serial.println(message);
-                            StaticJsonDocument<512> jsonMsg;
                             deserializeJson(jsonMsg, message);
 
-                            StaticJsonDocument<512> jsonState;
+                            jsonState.clear();
 
                             if(jsonMsg.containsKey("state")){
                                 if(jsonMsg["state"] != "ON" && jsonMsg["state"] != "OFF") return;
@@ -215,15 +222,12 @@ public:
                             }
                             // end-if effects_supported
 
-                            if(jsonMsg.containsKey("state")){
-                                state_listener(state);
+                            if(jsonMsg.containsKey("retain-recovery") && jsonMsg["retain-recovery"] == true){
+                                if(initialSetup)
+                                    initialSetup = false;
+                                else
+                                    return;
                             }
-
-                            // start-if brightness_supported
-                            if(jsonMsg.containsKey("brightness")){
-                                brightness_listener(brightness);
-                            }
-                            // end-if brightness_supported
 
                             // start-if color_temp_supported
                             if(jsonMsg.containsKey("color_temp")){
@@ -267,9 +271,62 @@ public:
                             }
                             // end-if effects_supported
 
-                            char responseMsg[512];
-                            serializeJson(jsonState, responseMsg, 512);
+                            // start-if brightness_supported
+                            if(jsonMsg.containsKey("brightness")){
+                                brightness_listener(brightness);
+                            }
+                            // end-if brightness_supported
+
+                            if(jsonMsg.containsKey("state")){
+                                state_listener(state);
+                            }
+
+                            char responseMsg[256];
+                            serializeJson(jsonState, responseMsg, 256);
                             device.publish(stateTopic.c_str(), responseMsg, retain);
+
+                            if(retain){
+                                jsonRetainedCommand["state"] = state ? "ON" : "OFF";
+                            // start-if brightness_supported
+                                jsonRetainedCommand["brightness"] = brightness;
+                            // end-if brightness_supported
+                            // start-if color_temp_supported
+                                jsonRetainedCommand["color_temp"] = color_temp;
+                            // end-if color_temp_supported
+                            // start-if rgb_supported
+                                jsonRetainedCommand["color"]["r"] = rgb.r;
+                                jsonRetainedCommand["color"]["g"] = rgb.g;
+                                jsonRetainedCommand["color"]["b"] = rgb.b;
+                            // end-if rgb_supported
+                            // start-if rgbw_supported
+                                jsonRetainedCommand["color"]["r"] = rgbw.r;
+                                jsonRetainedCommand["color"]["g"] = rgbw.g;
+                                jsonRetainedCommand["color"]["b"] = rgbw.b;
+                                jsonRetainedCommand["color"]["w"] = rgbw.w;
+                            // end-if rgbw_supported
+                            // start-if rgbww_supported
+                                jsonRetainedCommand["color"]["r"] = rgbww.r;
+                                jsonRetainedCommand["color"]["g"] = rgbww.g;
+                                jsonRetainedCommand["color"]["b"] = rgbww.b;
+                                jsonRetainedCommand["color"]["c"] = rgbww.c;
+                                jsonRetainedCommand["color"]["w"] = rgbww.w;
+                            // end-if rgbww_supported
+                            // start-if hs_supported
+                                jsonRetainedCommand["color"]["h"] = hs.h;
+                                jsonRetainedCommand["color"]["s"] = hs.s;
+                            // end-if hs_supported
+                            // start-if xy_supported
+                                jsonRetainedCommand["color"]["x"] = xy.x;
+                                jsonRetainedCommand["color"]["y"] = xy.y;
+                            // end-if xy_supported
+                            // start-if effects_supported
+                                jsonRetainedCommand["effect"] = effectToString(effect);
+                            // end-if effects_supported
+
+                                jsonRetainedCommand["retain-recovery"] = true;
+                                serializeJson(jsonRetainedCommand, responseMsg, 256);
+                                device.publish(commandTopic.c_str(), responseMsg, true);
+                            }
 
                             if(jsonMsg.containsKey("flash")){
                                 device.setTimeout(((uint32_t)jsonMsg["flash"]) * 1000, [this](){
@@ -334,6 +391,20 @@ public:
         return color_temp;
     }
 
+    // does account for brightness
+    uint8_t getCold()
+    {
+        int ratio = map(color_temp, 153, 500, 0, 511);
+        return (float)min(255, 511 - ratio) * (float)brightness / 255.0;
+    }
+
+    // does account for brightness
+    uint8_t getWarm()
+    {
+        int ratio = map(color_temp, 153, 500, 0, 511);
+        return (float)min(255, ratio) * (float)brightness / 255.0;
+    }
+
     void setColorTemp(uint16_t newColorTemp)
     {
         bool newState = newColorTemp > 0;
@@ -359,12 +430,12 @@ public:
     // end-if color_temp_supported
 
     // start-if rgb_supported
-    RGB getRGB()
+    Color_RGB getRGB()
     {
         return rgb;
     }
 
-    void setRGB(RGB _rgb)
+    void setRGB(Color_RGB _rgb)
     {
         bool newState = _rgb.r > 0 || _rgb.g > 0 || _rgb.b > 0;
 
@@ -384,19 +455,19 @@ public:
     }
 
     // only one listener will work, newest overwrites previous
-    void onRGB(std::function<void(RGB)> _listener)
+    void onRGB(std::function<void(Color_RGB)> _listener)
     {
         rgb_listener = _listener;
     }
     // end-if rgb_supported
 
     // start-if rgbw_supported
-    RGBW getRGBW()
+    Color_RGBW getRGBW()
     {
         return rgbw;
     }
 
-    void setRGBW(RGBW _rgbw)
+    void setRGBW(Color_RGBW _rgbw)
     {
         bool newState = _rgbw.r > 0 || _rgbw.g > 0 || _rgbw.b > 0 || _rgbw.w > 0;
 
@@ -417,19 +488,19 @@ public:
     }
 
     // only one listener will work, newest overwrites previous
-    void onRGBW(std::function<void(RGBW)> _listener)
+    void onRGBW(std::function<void(Color_RGBW)> _listener)
     {
         rgbw_listener = _listener;
     }
     // end-if rgbw_supported
 
     // start-if rgbww_supported
-    RGBWW getRGBWW()
+    Color_RGBWW getRGBWW()
     {
         return rgbww;
     }
 
-    void setRGBWW(RGBWW _rgbww)
+    void setRGBWW(Color_RGBWW _rgbww)
     {
         bool newState = _rgbww.r > 0 || _rgbww.g > 0 || _rgbww.b > 0 || _rgbww.c > 0 || _rgbww.w > 0;
 
@@ -451,7 +522,7 @@ public:
     }
 
     // only one listener will work, newest overwrites previous
-    void onRGBWW(std::function<void(RGBWW)> _listener)
+    void onRGBWW(std::function<void(Color_RGBWW)> _listener)
     {
         rgbww_listener = _listener;
     }
@@ -548,8 +619,7 @@ public:
         Serial.println("Invalid stringToEffect value: " + str_effect);
 
         delay(5000);
-        while (1)
-            ;
+        return (Effect)0;
     }
 
     void setEffect(Effect _effect)
