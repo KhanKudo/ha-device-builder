@@ -41,6 +41,9 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "map": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "*.tcc": "cpp",
+        "fstream": "cpp",
+        "ostream": "cpp"
     }
 }

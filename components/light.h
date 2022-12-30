@@ -3,6 +3,8 @@
 
 #define RETAIN false
 #define NUMBER_OF_EFFECTS 0
+#define MIN_MIREDS 0
+#define MAX_MIREDS 0
 
 // start
 
@@ -138,6 +140,9 @@ private:
     StaticJsonDocument<256> jsonRetainedCommand;
 
 public:
+    const unsigned int min_mireds = MIN_MIREDS;
+    const unsigned int max_mireds = MAX_MIREDS;
+
     _VAR_NAME()
     {
         if (!retain)
@@ -407,10 +412,8 @@ public:
 
     void setColorTemp(uint16_t newColorTemp)
     {
-        bool newState = newColorTemp > 0;
-
         StaticJsonDocument<64> jsonDoc;
-        jsonDoc["state"] = newState ? "ON" : "OFF";
+        jsonDoc["state"] = state ? "ON" : "OFF";
 
         jsonDoc["color_mode"] = "color_temp";
 
@@ -554,7 +557,7 @@ public:
 
     void setHS(HS _hs)
     {
-        bool newState = _hs.h > 0 || _hs.s;
+        bool newState = _hs.h > 0 || _hs.s > 0;
 
         StaticJsonDocument<96> jsonDoc;
         jsonDoc["state"] = newState ? "ON" : "OFF";
@@ -585,10 +588,8 @@ public:
 
     void setXY(XY _xy)
     {
-        bool newState = _xy.x > 0 || _xy.y > 0;
-
         StaticJsonDocument<96> jsonDoc;
-        jsonDoc["state"] = newState ? "ON" : "OFF";
+        jsonDoc["state"] = state ? "ON" : "OFF";
 
         jsonDoc["color_mode"] = "xy";
 
@@ -643,8 +644,6 @@ public:
     void setEffect(Effect _effect)
     {
         StaticJsonDocument<96> jsonDoc;
-        jsonDoc["state"] = "ON";
-
         jsonDoc["effect"] = effectToString(_effect);
 
         char message[96];

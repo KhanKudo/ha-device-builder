@@ -5,7 +5,8 @@
 
 #include <functional>
 #include <map>
-
+#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
 #elif defined(ESP32)
@@ -19,6 +20,8 @@
 struct _HA_DEVICE
 {
 private:
+    bool serverStatus = true;
+
     String name = "NAME";
     String codeName = "CODE_NAME";
 
@@ -26,10 +29,14 @@ private:
 
     std::map<String, std::function<void(String)>> listeners;
 
+    std::function<void(void)> onServerOnlineListener = []() {};
+    std::function<void(void)> onServerOfflineListener = []() {};
+
     std::map<uint32_t, std::function<void(void)>> timeouts;
 
     WiFiClient wifiClient;
-    PubSubClient client = PubSubClient(wifiClient);
+    WiFiClientSecure wifiClientSecure;
+    PubSubClient client;
 
     String availabilityTopic = "AVAILABILITY_TOPIC";
 
@@ -50,29 +57,26 @@ private:
 
     void reconnect()
     {
-        while (!client.connected())
+        if (!client.connected())
         {
-            if ((availabilityTopic == "" && !client.connect(codeName.c_str(),
-                                                            "user-iEQFaFF3N9afa7EkVVv9qTdSjdBLavsxizbr3hGo9eHEWHVqiq8dBdshtvQEL7kGwR6R3jEuh5Scnf7YmZzS4UbsAjqnsdyLio3L8XbHfB9Hqfbm8Q8PTxTRAzm76tH2",
-                                                            "w9NHNkrpKwUEeGm9uSE9mH33ci97oQhBrfnjsZb78wEqq7bsnCZkxCcyzJeF6k3u8pedwiHERerCcCaC6NE7oQt9vpEPrpYDLPeQA6QFq8AsKYKBUdCkWFvycAJ5kpdi")) ||
-                !client.connect(codeName.c_str(),
-                                "user-iEQFaFF3N9afa7EkVVv9qTdSjdBLavsxizbr3hGo9eHEWHVqiq8dBdshtvQEL7kGwR6R3jEuh5Scnf7YmZzS4UbsAjqnsdyLio3L8XbHfB9Hqfbm8Q8PTxTRAzm76tH2",
-                                "w9NHNkrpKwUEeGm9uSE9mH33ci97oQhBrfnjsZb78wEqq7bsnCZkxCcyzJeF6k3u8pedwiHERerCcCaC6NE7oQt9vpEPrpYDLPeQA6QFq8AsKYKBUdCkWFvycAJ5kpdi",
-                                availabilityTopic.c_str(),
-                                0,
-                                true,
-                                "offline"))
+            if ((availabilityTopic == "" && client.connect(codeName.c_str(), _user, _pass)) ||
+                client.connect(codeName.c_str(),
+                               _user,
+                               _pass,
+                               availabilityTopic.c_str(),
+                               0,
+                               true,
+                               "offline"))
             {
-                delay(5000);
-                ESP.restart();
+                connected();
             }
         }
-
-        connected();
     }
 
     void connected()
     {
+        client.subscribe("homeassistant/status");
+
         for (auto it = listeners.cbegin(); it != listeners.cend(); it++)
         {
             client.subscribe(it->first.c_str());
@@ -84,15 +88,41 @@ private:
         }
     }
 
-    IPAddress mqttBrokerIP;
+    const char *_ssid;
+    const char *_password;
+    const char *_broker;
+    bool _isEncrypted;
+    uint _port;
+    const char *_user;
+    const char *_pass;
+
+    uint32_t restartTimeout = 0;
 
 public:
 #ifdef TIME
     Timezone time;
 #endif
 
-    void init(const char *ssid = "wifi-user", const char *password = "wifi-pass")
+    void init(const char *ssid = "wifi-user", const char *password = "wifi-pass", const char *broker = "example.com", bool isEncrypted = true, uint port = 8885, const char *user = "user-fFXBzVQtm9NxQJmjc7F4CCVdowi7sDp4Js7q8g3jxKyZjddeVEUe7vxqxrmQUkDPax7MkJfwLabUHKjzdftuYYdbYavuCsPyJtjvFKfsak5bsksQ4ZPWD3bKb9QU6PZQ", const char *pass = "3oE5thSHgyK6DjMbFSyNCDZUAwrKQp6Q5cL3pEBLGXtzmJDaXm7keYmWi25dRRJUsouxrAN8tjnV4FZu74NbFAgUiAnFkXeiRBqPPgauhdmTbSBbLzZrxPyKv9g4oFwj")
     {
+        _ssid = ssid;
+        _password = password;
+        _broker = broker;
+        _isEncrypted = isEncrypted;
+        _port = port;
+        _user = user;
+        _pass = pass;
+
+        if (isEncrypted)
+        {
+            client = PubSubClient(wifiClientSecure);
+            wifiClientSecure.setInsecure();
+        }
+        else
+        {
+            client = PubSubClient(wifiClient);
+        }
+
         WiFi.begin(ssid, password);
 
 #ifndef TIME
@@ -105,30 +135,85 @@ public:
         time.setLocation("Europe/Vienna");
 #endif
 
-        WiFi.hostByName("example.com", mqttBrokerIP);
-        client.setServer(mqttBrokerIP, 1883);
+        ArduinoOTA.setHostname(codeName.c_str());
+        ArduinoOTA.begin();
+
+        client.setServer(broker, port);
         client.setCallback(callback);
 
         client.setBufferSize(1023);
 
+        subscribe("homeassistant/status", [this](String status)
+                  {
+            bool newStatus = false;
+            if(status == "online") {
+                newStatus = true;
+            }
+            else if (status == "offline") {
+                newStatus = false;
+            }
+
+            if (serverStatus != newStatus) {
+                serverStatus = newStatus;
+                if(newStatus)
+                    onServerOnlineListener();
+                else
+                    onServerOfflineListener();
+            }
+            /**/ });
+
         reconnect();
-        ArduinoOTA.setHostname(codeName.c_str());
-        ArduinoOTA.begin();
 
         // __insert-discovery-publish
     }
 
     void loop()
     {
+        if (!WiFi.isConnected())
+        {
+            if (restartTimeout == 0)
+            {
+                restartTimeout = millis() + 5 * 60 * 1000; // 5 Minutes
+            }
+
+            WiFi.begin(_ssid, _password);
+
+            WiFi.waitForConnectResult();
+        }
+
+        if (restartTimeout > 0 && millis() > restartTimeout)
+        {
+            ESP.restart();
+        }
+
+        if (!WiFi.isConnected())
+            return;
+
         if (!client.connected())
         {
+            if (restartTimeout == 0)
+            {
+                restartTimeout = millis() + 5 * 60 * 1000; // 5 Minutes
+            }
+
             reconnect();
         }
+        else
+        {
+            if (restartTimeout == 0)
+            {
+                restartTimeout = 0;
+            }
+        }
+
         client.loop();
+
         ArduinoOTA.handle();
+
 #ifdef TIME
         events();
 #endif
+
         if (timeouts.size() > 0 && millis() > timeoutLoopLimiter)
         {
             uint32_t *passed = new uint32_t(timeouts.size());
@@ -166,6 +251,22 @@ public:
     void clearRetain(const char *topic)
     {
         client.publish(topic, "", true);
+    }
+
+    // returns true for online and false for offline
+    bool getServerStatus()
+    {
+        return serverStatus;
+    }
+
+    void onServerOnline(std::function<void(void)> listener)
+    {
+        onServerOnlineListener = listener;
+    }
+
+    void onServerOffline(std::function<void(void)> listener)
+    {
+        onServerOfflineListener = listener;
     }
 
     // calls the callback after roughly the specified time in ms has passed

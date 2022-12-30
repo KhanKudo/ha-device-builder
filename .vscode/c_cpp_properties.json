@@ -8,8 +8,8 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "c:/dev/Home Assistant/ha-device-builder/include",
-                "c:/dev/Home Assistant/ha-device-builder/src",
+                "C:/dev/Home Assistant/ha-device-builder/include",
+                "C:/dev/Home Assistant/ha-device-builder/src",
                 "C:/Users/Luka/.platformio/packages/framework-arduinoespressif32/tools/sdk/include/config",
                 "C:/Users/Luka/.platformio/packages/framework-arduinoespressif32/tools/sdk/include/app_trace",
                 "C:/Users/Luka/.platformio/packages/framework-arduinoespressif32/tools/sdk/include/app_update",
@@ -113,8 +113,8 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "c:/dev/Home Assistant/ha-device-builder/include",
-                    "c:/dev/Home Assistant/ha-device-builder/src",
+                    "C:/dev/Home Assistant/ha-device-builder/include",
+                    "C:/dev/Home Assistant/ha-device-builder/src",
                     "C:/Users/Luka/.platformio/packages/framework-arduinoespressif32/tools/sdk/include/config",
                     "C:/Users/Luka/.platformio/packages/framework-arduinoespressif32/tools/sdk/include/app_trace",
                     "C:/Users/Luka/.platformio/packages/framework-arduinoespressif32/tools/sdk/include/app_update",
@@ -217,7 +217,7 @@
                 ]
             },
             "defines": [
-                "PLATFORMIO=50205",
+                "PLATFORMIO=60105",
                 "ARDUINO_ESP32_DEV",
                 "ESP32",
                 "ESP_PLATFORM",

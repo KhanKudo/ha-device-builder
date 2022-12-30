@@ -1,6 +1,9 @@
 #include "manager.h"
 
 #define RETAIN false
+#define MIN 0
+#define MAX 0
+#define STEP 0
 
 // start
 class _VAR_NAME
@@ -13,11 +16,15 @@ private:
 
     const bool retain = RETAIN;
 
-    std::function<void(bool)> listener = [](bool) {};
+    std::function<void(double)> listener = [](double) {};
 
-    bool state = false;
+    double value = 0;
 
 public:
+    const double min = MIN;
+    const double max = MAX;
+    const double step = STEP;
+
     _VAR_NAME()
     {
         if (!retain)
@@ -28,25 +35,29 @@ public:
 
         device.subscribe(commandTopic.c_str(), [this](String message)
                          {
-                            if(message != "ON" && message != "OFF") return;
-
-                            state = message == "ON";
+                            value = message.toDouble();
                             device.publish(stateTopic.c_str(), message.c_str(), retain);
-                            listener(message == "ON"); });
+                            listener(value); });
     }
 
-    bool getState()
+    double getValue()
     {
-        return state;
+        return value;
     }
 
-    void setState(bool newState)
+    void setValue(double newValue)
     {
-        device.publish(commandTopic.c_str(), newState ? "ON" : "OFF", retain);
+        device.publish(commandTopic.c_str(), String(newValue).c_str(), retain);
+    }
+
+    void setNone()
+    {
+        value = 0;
+        device.publish(commandTopic.c_str(), "None", retain);
     }
 
     // only one listener will work, newest overwrites previous
-    void onChange(std::function<void(bool)> _listener)
+    void onChange(std::function<void(double)> _listener)
     {
         listener = _listener;
     }

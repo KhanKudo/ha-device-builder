@@ -23,7 +23,12 @@ const yaml = require('js-yaml')
  *  features?: {
  *      class: "binary_sensor" |
  *             "button" |
+ *             "device_trigger" |
  *             "light" |
+ *             "lock" |
+ *             "number" |
+ *             "scene" |
+ *             "select" |
  *             "sensor" |
  *             "switch"
  *      name: string
@@ -41,6 +46,12 @@ const yaml = require('js-yaml')
  *      min_mireds?: number
  *      flash_time_long?: number
  *      flash_time_short?: number
+ *      min?: number
+ *      max?: number
+ *      step?: number
+ *      options?: string[]
+ *      type?: 'button_short_press' | 'button_short_release' | 'button_long_press' | 'button_long_release' | 'button_double_press' | 'button_triple_press' | 'button_quadruple_press' | 'button_quintuple_press' | string
+ *      subtype?: 'turn_on' | 'turn_off' | 'button_1' | 'button_2' | 'button_3' | 'button_4' | 'button_5' | 'button_6' | string
  *      mode?: "onoff" |
  *                   "brightness" |
  *                   "color_temp" |
@@ -57,15 +68,15 @@ const yaml = require('js-yaml')
 //  *  "-WIP-camera" |
 //  *  "-WIP-cover" |
 //  *  "-WIP-device_tracker" |
-//  *  "-WIP-device_trigger" |
+//  *  "device_trigger" |
 //  *  "-WIP-fan" |
 //  *  "-WIP-humidifier" |
 //  *  "-WIP-climate" |
 //  *  "light" |
-//  *  "-WIP-lock" |
-//  *  "-WIP-number" |
-//  *  "-WIP-scene" |
-//  *  "-WIP-select" |
+//  *  "lock" |
+//  *  "number" |
+//  *  "scene" |
+//  *  "select" |
 //  *  "sensor" |
 //  *  "switch" |
 //  *  "-WIP-tag_scanner" |
@@ -101,14 +112,22 @@ const discoveryPrefix = 'homeassistant'
  *      availability_topic?: string
  *      state_topic?: string
  *      command_topic?: string
+ *      topic?: string
  *      max_mireds?: number
  *      min_mireds?: number
  *      flash_time_long?: number
  *      flash_time_short?: number
+ *      min?: number
+ *      max?: number
+ *      step?: number
  *      brightness?: boolean
  *      mode?: boolean
  *      supported_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
+ *      options?: string[]
  *      schema?: 'json'
+ *      automation_type?: 'trigger'
+ *      type?: 'button_short_press' | 'button_short_release' | 'button_long_press' | 'button_long_release' | 'button_double_press' | 'button_triple_press' | 'button_quadruple_press' | 'button_quintuple_press' | string
+ *      subtype?: 'turn_on' | 'turn_off' | 'button_1' | 'button_2' | 'button_3' | 'button_4' | 'button_5' | 'button_6' | string
  *      device: {
  *          name: string
  *          model?: string
@@ -152,7 +171,12 @@ outputHeader += '\n\n'
  * @param {{
  *      class: "binary_sensor" |
  *             "button" |
+ *             "device_trigger" |
  *             "light" |
+ *             "lock" |
+ *             "number" |
+ *             "scene" |
+ *             "select" |
  *             "sensor" |
  *             "switch"
  *      name: string
@@ -169,6 +193,12 @@ outputHeader += '\n\n'
  *      min_mireds?: number
  *      flash_time_long?: number
  *      flash_time_short?: number
+ *      min?: number
+ *      max?: number
+ *      step?: number
+ *      options?: string[]
+ *      type?: 'button_short_press' | 'button_short_release' | 'button_long_press' | 'button_long_release' | 'button_double_press' | 'button_triple_press' | 'button_quadruple_press' | 'button_quintuple_press' | string
+ *      subtype?: 'turn_on' | 'turn_off' | 'button_1' | 'button_2' | 'button_3' | 'button_4' | 'button_5' | 'button_6' | string
  *      mode?: "onoff" |
  *                   "brightness" |
  *                   "color_temp" |
@@ -190,14 +220,22 @@ outputHeader += '\n\n'
  *      availability_topic?: string
  *      state_topic?: string
  *      command_topic?: string
+ *      topic?: string
  *      flash_time_long?: number
  *      flash_time_short?: number
+ *      min?: number
+ *      max?: number
+ *      step?: number
  *      brightness?: boolean
  *      mode?: boolean
  *      supported_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
  *      max_mireds?: number
  *      min_mireds?: number
+ *      options?: string[]
  *      schema?: 'json'
+ *      automation_type?: 'trigger'
+ *      type?: 'button_short_press' | 'button_short_release' | 'button_long_press' | 'button_long_release' | 'button_double_press' | 'button_triple_press' | 'button_quadruple_press' | 'button_quintuple_press' | string
+ *      subtype?: 'turn_on' | 'turn_off' | 'button_1' | 'button_2' | 'button_3' | 'button_4' | 'button_5' | 'button_6' | string
  *      device: {
  *          name: string
  *          model?: string
@@ -243,14 +281,14 @@ function processFeature(feature, jsonFeature) {
             case 'color_temp_supported':
                 conditionResult = feature.mode === 'color_temp'
                 break
-            case 'rgb_supported':
-                conditionResult = feature.mode === 'rgb'
-                break
-            case 'rgbw_supported':
-                conditionResult = feature.mode === 'rgbw'
+            case 'effects_supported':
+                conditionResult = feature.effect_list !== undefined && feature.effect_list.length > 0
                 break
             case 'rgbww_supported':
                 conditionResult = feature.mode === 'rgbww'
+                break
+            case 'rgbw_supported':
+                conditionResult = feature.mode === 'rgbw'
                 break
             case 'hs_supported':
                 conditionResult = feature.mode === 'hs'
@@ -258,8 +296,8 @@ function processFeature(feature, jsonFeature) {
             case 'xy_supported':
                 conditionResult = feature.mode === 'xy'
                 break
-            case 'effects_supported':
-                conditionResult = feature.effect_list !== undefined && feature.effect_list.length > 0
+            case 'rgb_supported':
+                conditionResult = feature.mode === 'rgb'
                 break
             default:
                 throw new Error(`start-if condition invalid, "${condition}"`)
@@ -285,26 +323,44 @@ function processFeature(feature, jsonFeature) {
 
     component = componentLines.join('\n')
 
-    // remove the part before the start identifier,
+    // remove the part before the start identifier
     component = component.slice(component.indexOf(startIdentifier) + startIdentifier.length)
-        // uncomment all "// uncomment:..." commands,
+        // uncomment all "// uncomment:..." commands
         .replace(/\/\/ uncomment:/g, '')
-        // insert effect-list-enum,
+        // insert effect-list-enum
         .replace('// __insert-effect-list-enum\r\n', (feature.effect_list?.length ?? 0) > 0 ? feature.effect_list.map(effect => effect.replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '')).join(',\n\t\t') + '\n' : '')
-        // insert effect-list,
+        // insert option-list-enum
+        .replace('// __insert-option-list-enum\r\n', (feature.options?.length ?? 0) > 0 ? feature.options.map(effect => effect.replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '')).join(',\n\t\t') + '\n' : '')
+        // insert effect-list
         .replace('// __insert-effect-list\r\n', (feature.effect_list?.length ?? 0) > 0 ? feature.effect_list.map(effect => `"${effect}"`).join(',\n\t\t') + '\n' : '')
-        // replace NUMBER_OF_EFFECTS,
+        // insert option-list
+        .replace('// __insert-option-list\r\n', (feature.options?.length ?? 0) > 0 ? feature.options.map(effect => `"${effect}"`).join(',\n\t\t') + '\n' : '')
+        // replace NUMBER_OF_EFFECTS
         .replace(/NUMBER_OF_EFFECTS/g, feature.effect_list?.length ?? 0)
-        // replace COMMAND_TOPIC,
+        // replace NUMBER_OF_OPTIONS
+        .replace(/NUMBER_OF_OPTIONS/g, feature.options?.length ?? 0)
+        // replace COMMAND_TOPIC
         .replace(/COMMAND_TOPIC/g, jsonFeature.command_topic?.replace('~', jsonFeature['~']) ?? '')
-        // replace STATE_TOPIC,
+        // replace STATE_TOPIC
         .replace(/STATE_TOPIC/g, jsonFeature.state_topic?.replace('~', jsonFeature['~']) ?? '')
-        // replace VAR_NAME,
+        // replace MIN_MIREDS
+        .replace(/MIN_MIREDS/g, jsonFeature.min_mireds)
+        // replace MAX_MIREDS
+        .replace(/MAX_MIREDS/g, jsonFeature.max_mireds)
+        // replace VAR_NAME
         .replace(/VAR_NAME/g, feature.var_name ?? toCodeName(jsonFeature.name).replace(/-/g, '_'))
-        // replace RETAIN,
+        // replace RETAIN
         .replace(/RETAIN/g, jsonFeature.retain)
-        // replace NAME,
+        // replace TOPIC
+        .replace(/TOPIC/g, jsonFeature.topic?.replace('~', jsonFeature['~']) ?? '')
+        // replace NAME
         .replace(/NAME/g, jsonFeature.name)
+        // replace STEP
+        .replace(/STEP/g, jsonFeature.step)
+        // replace MIN
+        .replace(/MIN/g, jsonFeature.min)
+        // replace MAX
+        .replace(/MAX/g, jsonFeature.max)
         + '\n'
 
     return component
@@ -343,6 +399,13 @@ device.features.forEach((feature, index) => {
             haMqtt.command_topic = `~/command`
             haMqtt.retain = false
             break
+        case 'device_trigger':
+            haMqtt.topic = `~/topic`
+            haMqtt.automation_type = 'trigger'
+            haMqtt.retain = false
+            haMqtt.type = feature.type
+            haMqtt.subtype = feature.subtype
+            break
         case 'light':
             haMqtt.command_topic = `~/command`
             haMqtt.state_topic = `~/state`
@@ -350,10 +413,30 @@ device.features.forEach((feature, index) => {
             haMqtt.brightness = feature.mode !== undefined && feature.mode !== 'onoff'
             haMqtt.color_mode = true
             haMqtt.supported_color_modes = [feature.mode ?? 'onoff']
-            haMqtt.max_mireds = feature.max_mireds
-            haMqtt.min_mireds = feature.min_mireds
+            haMqtt.max_mireds = feature.max_mireds ?? 500
+            haMqtt.min_mireds = feature.min_mireds ?? 153
             haMqtt.effect_list = feature.effect_list
             haMqtt.effect = feature.effect_list !== undefined && feature.effect_list.length > 0
+            break
+        case 'lock':
+            haMqtt.command_topic = `~/command`
+            haMqtt.state_topic = `~/state`
+            break
+        case 'number':
+            haMqtt.command_topic = `~/command`
+            haMqtt.state_topic = `~/state`
+            haMqtt.min = feature.min
+            haMqtt.max = feature.max
+            haMqtt.step = feature.step
+            haMqtt.unit_of_measurement = feature.unit_of_measurement
+            break
+        case 'scene':
+            haMqtt.command_topic = `~/command`
+            break
+        case 'select':
+            haMqtt.command_topic = `~/command`
+            haMqtt.state_topic = `~/state`
+            haMqtt.options = feature.options
             break
         case 'sensor':
             haMqtt.expire_after = feature.expire_after
