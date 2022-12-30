@@ -435,6 +435,12 @@ public:
         return rgb;
     }
 
+    // brightness already accounted for
+    Color_RGB getFinalRGB()
+    {
+        return {(uint8_t)((float)brightness * ((float)rgb.r / 255.0f)), (uint8_t)((float)brightness * ((float)rgb.g / 255.0f)), (uint8_t)((float)brightness * ((float)rgb.b / 255.0f))};
+    }
+
     void setRGB(Color_RGB _rgb)
     {
         bool newState = _rgb.r > 0 || _rgb.g > 0 || _rgb.b > 0;
@@ -465,6 +471,12 @@ public:
     Color_RGBW getRGBW()
     {
         return rgbw;
+    }
+
+    // brightness already accounted for
+    Color_RGBW getFinalRGBW()
+    {
+        return {(uint8_t)((float)brightness * ((float)rgbw.r / 255.0f)), (uint8_t)((float)brightness * ((float)rgbw.g / 255.0f)), (uint8_t)((float)brightness * ((float)rgbw.b / 255.0f)), (uint8_t)((float)brightness * ((float)rgbw.w / 255.0f))};
     }
 
     void setRGBW(Color_RGBW _rgbw)
@@ -498,6 +510,12 @@ public:
     Color_RGBWW getRGBWW()
     {
         return rgbww;
+    }
+
+    // brightness already accounted for
+    Color_RGBWW getFinalRGBWW()
+    {
+        return {(uint8_t)((float)brightness * ((float)rgbww.r / 255.0f)), (uint8_t)((float)brightness * ((float)rgbww.g / 255.0f)), (uint8_t)((float)brightness * ((float)rgbww.b / 255.0f)), (uint8_t)((float)brightness * ((float)rgbww.c / 255.0f)), (uint8_t)((float)brightness * ((float)rgbww.w / 255.0f))};
     }
 
     void setRGBWW(Color_RGBWW _rgbww)

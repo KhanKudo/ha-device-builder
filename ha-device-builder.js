@@ -374,7 +374,7 @@ device.features.forEach((feature, index) => {
 })
 
 // insert discovery publish
-outputHeader = outputHeader.replace('// __insert-discovery-publish\r\n', haMqttJsonFeatures.map(jsonFeature => `client.publish("${jsonFeature['~']}/config", R"=-=-=(${JSON.stringify(jsonFeature)})=-=-=");`).join('\n\t\t') + '\n')
+outputHeader = outputHeader.replace('// __insert-discovery-publish\r\n', haMqttJsonFeatures.map(jsonFeature => `client.publish("${jsonFeature['~']}/config", R"=-=-=(${JSON.stringify(jsonFeature)})=-=-=", true);`).join('\n\t\t') + '\n')
 
 // write the output file
 fs.writeFileSync('include/ha-device.h', outputHeader)
