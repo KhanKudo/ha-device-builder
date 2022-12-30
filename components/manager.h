@@ -36,7 +36,7 @@ private:
 
     WiFiClient wifiClient;
     WiFiClientSecure wifiClientSecure;
-    PubSubClient client;
+    PubSubClient client = PubSubClient(wifiClient);
 
     String availabilityTopic = "AVAILABILITY_TOPIC";
 
@@ -115,12 +115,8 @@ public:
 
         if (isEncrypted)
         {
-            client = PubSubClient(wifiClientSecure);
+            client.setClient(wifiClientSecure);
             wifiClientSecure.setInsecure();
-        }
-        else
-        {
-            client = PubSubClient(wifiClient);
         }
 
         WiFi.begin(ssid, password);
