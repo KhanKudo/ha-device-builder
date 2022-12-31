@@ -5,6 +5,8 @@
 #define NUMBER_OF_EFFECTS 0
 #define MIN_MIREDS 0
 #define MAX_MIREDS 0
+#define RESOLUTION 0
+#define UINT_RESOLUTION_T uint8_t
 
 // start
 
@@ -88,8 +90,8 @@ private:
     bool state = false;
 
     // start-if brightness_supported
-    uint8_t brightness = 0;
-    std::function<void(uint8_t)> brightness_listener = [](uint8_t) {};
+    UINT_RESOLUTION_T brightness = 0;
+    std::function<void(UINT_RESOLUTION_T)> brightness_listener = [](UINT_RESOLUTION_T) {};
     // end-if brightness_supported
 
     // start-if color_temp_supported
@@ -140,8 +142,14 @@ private:
     StaticJsonDocument<256> jsonRetainedCommand;
 
 public:
+    // start-if color_temp_supported
     const unsigned int min_mireds = MIN_MIREDS;
     const unsigned int max_mireds = MAX_MIREDS;
+    // end-if color_temp_supported
+
+    // start-if brightness_supported
+    const uint8_t resolution = RESOLUTION;
+    // end-if brightness_supported
 
     _VAR_NAME()
     {
@@ -363,12 +371,12 @@ public:
     }
 
     // start-if brightness_supported
-    uint8_t getBrightness()
+    UINT_RESOLUTION_T getBrightness()
     {
         return brightness;
     }
 
-    void setBrightness(uint8_t newBrightness)
+    void setBrightness(UINT_RESOLUTION_T newBrightness)
     {
         bool newState = newBrightness > 0;
 
@@ -384,7 +392,7 @@ public:
     }
 
     // only one listener will work, newest overwrites previous
-    void onBrightness(std::function<void(uint8_t)> _listener)
+    void onBrightness(std::function<void(UINT_RESOLUTION_T)> _listener)
     {
         brightness_listener = _listener;
     }

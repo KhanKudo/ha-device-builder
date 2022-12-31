@@ -46,6 +46,7 @@ const yaml = require('js-yaml')
  *      min_mireds?: number
  *      flash_time_long?: number
  *      flash_time_short?: number
+ *      resolution?: number
  *      min?: number
  *      max?: number
  *      step?: number
@@ -93,8 +94,8 @@ function toCodeName(name) {
  */
 const components = {}
 
-for (const fileName of fs.readdirSync(`${__dirname}/components/`)) {
-    components[fileName.slice(0, -2)] = fs.readFileSync(`${__dirname}/components/${fileName}`).toString()
+for (const fileName of fs.readdirSync(`${ __dirname }/components/`)) {
+    components[fileName.slice(0, -2)] = fs.readFileSync(`${ __dirname }/components/${ fileName }`).toString()
 }
 
 const discoveryPrefix = 'homeassistant'
@@ -121,6 +122,7 @@ const discoveryPrefix = 'homeassistant'
  *      max?: number
  *      step?: number
  *      brightness?: boolean
+ *      brightness_scale?: number
  *      mode?: boolean
  *      supported_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
  *      options?: string[]
@@ -151,7 +153,7 @@ const startIdentifier = '// start\r\n'
 /**
  * @type {string | null}
  */
-const availabilityTopic = (device.availability !== false) ? `home/${toCodeName(device.name)}/availability` : null
+const availabilityTopic = (device.availability !== false) ? `home/${ toCodeName(device.name) }/availability` : null
 
 // remove the part before the start identifier,
 outputHeader += components['manager'].slice(components['manager'].indexOf(startIdentifier) + startIdentifier.length)
@@ -193,6 +195,7 @@ outputHeader += '\n\n'
  *      min_mireds?: number
  *      flash_time_long?: number
  *      flash_time_short?: number
+ *      resolution?: number
  *      min?: number
  *      max?: number
  *      step?: number
@@ -227,6 +230,7 @@ outputHeader += '\n\n'
  *      max?: number
  *      step?: number
  *      brightness?: boolean
+ *      brightness_scale?: number
  *      mode?: boolean
  *      supported_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
  *      max_mireds?: number
@@ -300,17 +304,17 @@ function processFeature(feature, jsonFeature) {
                 conditionResult = feature.mode === 'rgb'
                 break
             default:
-                throw new Error(`start-if condition invalid, "${condition}"`)
+                throw new Error(`start-if condition invalid, "${ condition }"`)
         }
 
         conditionResultList.push({ condition, result: conditionResult })
     })
 
     for (const { condition, result } of conditionResultList) {
-        const startIndex = componentLines.findIndex(line => line.includes(`// start-if ${condition}`))
+        const startIndex = componentLines.findIndex(line => line.includes(`// start-if ${ condition }`))
         if (startIndex === -1) continue
-        const endIndex = componentLines.findIndex(line => line.includes(`// end-if ${condition}`))
-        if (endIndex === -1) throw new Error(`incomplete if statement, missing // end-if ${condition}`)
+        const endIndex = componentLines.findIndex(line => line.includes(`// end-if ${ condition }`))
+        if (endIndex === -1) throw new Error(`incomplete if statement, missing // end-if ${ condition }`)
 
         if (result) {
             componentLines.splice(endIndex, 1)
@@ -332,9 +336,11 @@ function processFeature(feature, jsonFeature) {
         // insert option-list-enum
         .replace('// __insert-option-list-enum\r\n', (feature.options?.length ?? 0) > 0 ? feature.options.map(effect => effect.replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '')).join(',\n\t\t') + '\n' : '')
         // insert effect-list
-        .replace('// __insert-effect-list\r\n', (feature.effect_list?.length ?? 0) > 0 ? feature.effect_list.map(effect => `"${effect}"`).join(',\n\t\t') + '\n' : '')
+        .replace('// __insert-effect-list\r\n', (feature.effect_list?.length ?? 0) > 0 ? feature.effect_list.map(effect => `"${ effect }"`).join(',\n\t\t') + '\n' : '')
         // insert option-list
-        .replace('// __insert-option-list\r\n', (feature.options?.length ?? 0) > 0 ? feature.options.map(effect => `"${effect}"`).join(',\n\t\t') + '\n' : '')
+        .replace('// __insert-option-list\r\n', (feature.options?.length ?? 0) > 0 ? feature.options.map(effect => `"${ effect }"`).join(',\n\t\t') + '\n' : '')
+        // replace UINT_RESOLUTION_T
+        .replace(/UINT_RESOLUTION_T/g, `uint${2 ** Math.ceil(Math.log2(feature.resolution))}_t`)
         // replace NUMBER_OF_EFFECTS
         .replace(/NUMBER_OF_EFFECTS/g, feature.effect_list?.length ?? 0)
         // replace NUMBER_OF_OPTIONS
@@ -347,6 +353,8 @@ function processFeature(feature, jsonFeature) {
         .replace(/MIN_MIREDS/g, jsonFeature.min_mireds)
         // replace MAX_MIREDS
         .replace(/MAX_MIREDS/g, jsonFeature.max_mireds)
+        // replace RESOLUTION
+        .replace(/RESOLUTION/g, feature.resolution)
         // replace VAR_NAME
         .replace(/VAR_NAME/g, feature.var_name ?? toCodeName(jsonFeature.name).replace(/-/g, '_'))
         // replace RETAIN
@@ -370,7 +378,7 @@ device.features.forEach((feature, index) => {
     haMqttJsonFeatures[index] = {}
     const haMqtt = haMqttJsonFeatures[index]
 
-    haMqtt['~'] = `${discoveryPrefix}/${feature.class}/${feature.unique_id}`
+    haMqtt['~'] = `${ discoveryPrefix }/${ feature.class }/${ feature.unique_id }`
     haMqtt.name = feature.name
     haMqtt.unique_id = feature.unique_id
     haMqtt.icon = feature.icon
@@ -415,6 +423,7 @@ device.features.forEach((feature, index) => {
             haMqtt.supported_color_modes = [feature.mode ?? 'onoff']
             haMqtt.max_mireds = feature.max_mireds ?? 500
             haMqtt.min_mireds = feature.min_mireds ?? 153
+            haMqtt.brightness_scale = 2 ** (feature.resolution ?? 8) - 1
             haMqtt.effect_list = feature.effect_list
             haMqtt.effect = feature.effect_list !== undefined && feature.effect_list.length > 0
             break
@@ -449,7 +458,7 @@ device.features.forEach((feature, index) => {
             haMqtt.state_topic = `~/state`
             break
         default:
-            throw new Error(`No feature class called "${feature.class}" exists`)
+            throw new Error(`No feature class called "${ feature.class }" exists`)
     }
 
     outputHeader += processFeature(feature, haMqtt)
@@ -457,7 +466,7 @@ device.features.forEach((feature, index) => {
 })
 
 // insert discovery publish
-outputHeader = outputHeader.replace('// __insert-discovery-publish\r\n', haMqttJsonFeatures.map(jsonFeature => `client.publish("${jsonFeature['~']}/config", R"=-=-=(${JSON.stringify(jsonFeature)})=-=-=", true);`).join('\n\t\t') + '\n')
+outputHeader = outputHeader.replace('// __insert-discovery-publish\r\n', haMqttJsonFeatures.map(jsonFeature => `client.publish("${ jsonFeature['~'] }/config", R"=-=-=(${ JSON.stringify(jsonFeature) })=-=-=", true);`).join('\n\t\t') + '\n')
 
 // write the output file
 fs.writeFileSync('include/ha-device.h', outputHeader)
@@ -465,18 +474,18 @@ fs.writeFileSync('include/ha-device.h', outputHeader)
 // add the ArduinoOTA upload port to platformio.ini, if not already present
 if (fs.existsSync('platformio.ini')) {
     const iniFile = fs.readFileSync('platformio.ini').toString()
-    const host = `${toCodeName(device.name)}.local`
+    const host = `${ toCodeName(device.name) }.local`
     // check if hostname is active, otherwise don't add it, may be the initial upload, so the device has a blank project, no ArduinoOTA
     dns.lookup(host, 4, (err, address) => {
         if (err) return
 
         // if there is no upload_port, then just append one to the end of the file
         if (!iniFile.includes('upload_port = ')) {
-            fs.appendFileSync('platformio.ini', `upload_port = ${host}\n`)
+            fs.appendFileSync('platformio.ini', `upload_port = ${ host }\n`)
         }
         // if there is an upload_port already present, then check if it's the same as the currectly suggested one, if so, don't do anything, otherwise overwrite it
-        else if (!iniFile.includes(`upload_port = ${host}`)) {
-            fs.writeFileSync('platformio.ini', iniFile.split('\n').map(line => line.includes('upload_port = ') ? `upload_port = ${host}` : line).join('\n'))
+        else if (!iniFile.includes(`upload_port = ${ host }`)) {
+            fs.writeFileSync('platformio.ini', iniFile.split('\n').map(line => line.includes('upload_port = ') ? `upload_port = ${ host }` : line).join('\n'))
         }
     })
 }
