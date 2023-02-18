@@ -166,6 +166,11 @@ public:
 
                             jsonState.clear();
 
+                            // start-if effects_supported
+                            if(jsonMsg.containsKey("effect") && !jsonMsg.containsKey("state"))
+                                return;
+                            // end-if effects_supported
+
                             if(jsonMsg.containsKey("state")){
                                 if(jsonMsg["state"] != "ON" && jsonMsg["state"] != "OFF") return;
 
