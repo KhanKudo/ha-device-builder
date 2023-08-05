@@ -99,8 +99,6 @@ function toCodeName(name) {
 //TODO a general native_handling-toggle should also exist, such as light1.disableNativeHandler(), with an enable of course too
 //TODO the compiler should also know that, if no yaml options for native handling are present, then those functions should be either
 
-//! ----- move json schema ha-device-builder folder -> include it in git -----
-
 /**
  * @type {[key: string]: string}
  */
@@ -171,11 +169,13 @@ const availabilityTopic = (device.availability !== false) ? `home/${toCodeName(d
 outputHeader += components['manager'].slice(components['manager'].indexOf(startIdentifier) + startIdentifier.length)
     // uncomment all "// uncomment:..." commands,
     .replace(/\/\/ uncomment:/g, '')
-    // replace AVAILABILITY_TOPIC,
+    // replace AVAILABILITY_TOPIC
     .replace(/AVAILABILITY_TOPIC/g, availabilityTopic ?? '')
-    // replace CODE_NAME,
+    // replace CODE_NAME
     .replace(/CODE_NAME/g, toCodeName(device.name))
-    // replace NAME,
+    // replace DEVICE_ID
+    .replace(/DEVICE_ID/g, Array.isArray(device.identifiers) ? device.identifiers.join('') : device.identifiers)
+    // replace NAME
     .replace(/NAME/g, device.name)
 
 outputHeader += '\n\n'

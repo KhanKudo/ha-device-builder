@@ -1,0 +1,304 @@
+{
+    "$schema": "https://json-schema.org/draft-07/schema#",
+    "title": "Home Assistant MQTT Device",
+    "description": "A simple way to configure a Home Assistant device",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "name": {
+            "description": "The name of the device",
+            "type": "string"
+        },
+        "manufacturer": {
+            "description": "The manufacturer of the device",
+            "type": "string"
+        },
+        "model": {
+            "description": "The model of the device",
+            "type": "string"
+        },
+        "suggested_area": {
+            "description": "Suggest an area if the device isn't in one yet",
+            "type": "string"
+        },
+        "sw_version": {
+            "description": "The firmware version of the device",
+            "type": "string"
+        },
+        "availability": {
+            "description": "Whether or not to tell home assistant when the device is online/offline. Default: true",
+            "type": "boolean"
+        },
+        "identifiers": {
+            "oneOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            ]
+        },
+        "time": {
+            "description": "Whether or not to keep track of time using the ezTime library exposing a time property as well as some functions, uses more resources and network bandwidth/data, Default: false",
+            "type": "boolean"
+        },
+        "retain": {
+            "description": "Whether or not mqtt messages are sent using the retain flag. Default: true",
+            "type": "boolean"
+        },
+        "features": {
+            "description": "A list of all the device's features and capabilities, e.g. Lights, Switches, Buttons, ...",
+            "type": "array",
+            "items": {
+                "title": "Feature",
+                "description": "A feature/function of the device",
+                "additionalProperties": true,
+                "type": "object",
+                "properties": {
+                    "class": {
+                        "enum": [
+                            "-WIP-alarm_control_panel",
+                            "binary_sensor",
+                            "button",
+                            "-WIP-camera",
+                            "-WIP-cover",
+                            "-WIP-device_tracker",
+                            "device_trigger",
+                            "-WIP-fan",
+                            "-WIP-humidifier",
+                            "-WIP-climate",
+                            "light",
+                            "lock",
+                            "number",
+                            "scene",
+                            "select",
+                            "sensor",
+                            "switch",
+                            "-WIP-tag_scanner",
+                            "-WIP-vacuum"
+                        ]
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "var_name": {
+                        "type": "string"
+                    },
+                    "unique_id": {
+                        "type": "string"
+                    },
+                    "retain": {
+                        "description": "Whether or not mqtt messages are sent using the retain flag. Default: Taken from device.availability, which defaults to true",
+                        "type": "boolean"
+                    },
+                    "icon": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "class",
+                    "name",
+                    "unique_id"
+                ],
+                "oneOf": [
+                    {
+                        "properties": {
+                            "class": {
+                                "enum": [
+                                    "binary_sensor"
+                                ]
+                            },
+                            "expire_after": {
+                                "description": "Time in Seconds",
+                                "type": "integer"
+                            },
+                            "off_delay": {
+                                "description": "Time in Seconds",
+                                "type": "integer"
+                            },
+                            "force_update": {
+                                "type": "boolean"
+                            }
+                        }
+                    },
+                    {
+                        "properties": {
+                            "class": {
+                                "enum": [
+                                    "button"
+                                ]
+                            },
+                            "retain": {
+                                "type": "null"
+                            }
+                        }
+                    },
+                    {
+                        "properties": {
+                            "class": {
+                                "enum": [
+                                    "light"
+                                ]
+                            },
+                            "effect_list": {
+                                "oneOf": [
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                ]
+                            },
+                            "mode": {
+                                "description": "The type of light, Default: onoff",
+                                "enum": [
+                                    "onoff",
+                                    "brightness",
+                                    "color_temp",
+                                    "hs",
+                                    "xy",
+                                    "rgb",
+                                    "rgbw",
+                                    "rgbww"
+                                ]
+                            },
+                            "flash_time_long": {
+                                "description": "Time in Seconds, Default: 10",
+                                "type": "integer"
+                            },
+                            "flash_time_short": {
+                                "description": "Time in Seconds, Default: 2",
+                                "type": "integer"
+                            },
+                            "max_mireds": {
+                                "description": "Max color temperature in mireds, Default: 500",
+                                "type": "number"
+                            },
+                            "min_mireds": {
+                                "description": "Min color temperature in mireds, Default: 153",
+                                "type": "number"
+                            },
+                            "resolution": {
+                                "description": "The lights brightness resolution in bit, Default: 8 (0-255)",
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 32
+                            }
+                        }
+                    },
+                    {
+                        "properties": {
+                            "class": {
+                                "enum": [
+                                    "lock"
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "properties": {
+                            "class": {
+                                "enum": [
+                                    "number"
+                                ]
+                            },
+                            "min": {
+                                "type": "number"
+                            },
+                            "max": {
+                                "type": "number"
+                            },
+                            "step": {
+                                "type": "number"
+                            },
+                            "unit_of_measurement": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    {
+                        "properties": {
+                            "class": {
+                                "enum": [
+                                    "scene"
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "properties": {
+                            "class": {
+                                "enum": [
+                                    "device_trigger"
+                                ]
+                            },
+                            "type": {
+                                "description": "Supported by frontend: button_short_press, button_short_release, button_long_press, button_long_release, button_double_press, button_triple_press, button_quadruple_press, button_quintuple_press",
+                                "type": "string"
+                            },
+                            "subtype": {
+                                "description": "turn_on, turn_off, button_1, button_2, button_3, button_4, button_5, button_6",
+                                "type": "string"
+                            }
+                        }
+                    },
+                    {
+                        "properties": {
+                            "class": {
+                                "enum": [
+                                    "select"
+                                ]
+                            },
+                            "options": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "properties": {
+                            "class": {
+                                "enum": [
+                                    "sensor"
+                                ]
+                            },
+                            "expire_after": {
+                                "description": "Time in Seconds",
+                                "type": "integer"
+                            },
+                            "force_update": {
+                                "type": "boolean"
+                            },
+                            "unit_of_measurement": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    {
+                        "properties": {
+                            "class": {
+                                "enum": [
+                                    "switch"
+                                ]
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "required": [
+        "name",
+        "identifiers"
+    ]
+}

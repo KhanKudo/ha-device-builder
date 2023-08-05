@@ -3,6 +3,8 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 
+#define MD5_HASH_SIZE 16
+
 #include <functional>
 #include <map>
 #include <WiFiClient.h>
@@ -24,6 +26,7 @@ private:
 
     String name = "NAME";
     String codeName = "CODE_NAME";
+    String id = "DEVICE_ID";
 
     std::function<void(void)> listener = []() {};
 
@@ -85,6 +88,91 @@ private:
         if (availabilityTopic != "")
         {
             client.publish(availabilityTopic.c_str(), "online", true);
+        }
+    }
+
+    void calculateHash(char *hashString)
+    {
+        uint8_t hashBuffer[MD5_HASH_SIZE];
+
+        ESP.getSketchMD5().getBytes(hashBuffer, MD5_HASH_SIZE);
+
+        // Format the MD5 hash as a hex string instead of raw bytes
+        for (int i = 0; i < MD5_HASH_SIZE; i++)
+        {
+            sprintf(&hashString[i * 2], "%02x", hashBuffer[i]);
+        }
+        hashString[MD5_HASH_SIZE * 2] = '\0'; // Null-terminate the string
+    }
+
+    void updateFirmware()
+    {
+        String url = String("https://") + String(_broker) + String("/update?id=") + id;
+
+        if (wifiClientSecure.connect(url.c_str(), 443))
+        {
+            Serial.println("Connected!");
+
+            // Make an HTTP GET request
+            wifiClientSecure.print(String("GET ") + url + " HTTP/1.1\r\n" +
+                                   "Host: " + url + "\r\n" +
+                                   "Connection: close\r\n\r\n");
+
+            // Skip HTTP headers
+            bool foundEndOfHeaders = false;
+            while (wifiClientSecure.connected() && !foundEndOfHeaders)
+            {
+                if (wifiClientSecure.find("\r\n\r\n"))
+                {
+                    foundEndOfHeaders = true;
+                }
+            }
+
+            // Start OTA update
+            if (Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH))
+            {
+                // Process the response data in chunks and write it to the update
+                const size_t chunkSize = 15000; // Set the chunk size to 15000 bytes
+                uint8_t buffer[chunkSize];
+                size_t bytesRead;
+                do
+                {
+                    bytesRead = wifiClientSecure.readBytes(buffer, chunkSize);
+                    if (bytesRead > 0)
+                    {
+                        // Write the chunk to the OTA update
+                        if (!Update.write(buffer, bytesRead))
+                        {
+                            Serial.println("Error writing OTA update data");
+                            Update.abort();
+                            break;
+                        }
+                    }
+                } while (bytesRead > 0);
+
+                // Finish OTA update
+                if (Update.end(true))
+                {
+                    Serial.println("OTA update completed successfully, rebooting...");
+                    ESP.restart();
+                }
+                else
+                {
+                    Serial.println("OTA update failed");
+                }
+            }
+            else
+            {
+                Serial.println("OTA update not started");
+            }
+
+            // Close the connection
+            wifiClientSecure.stop();
+            Serial.println("Connection closed");
+        }
+        else
+        {
+            Serial.println("Connection failed");
         }
     }
 
@@ -158,9 +246,22 @@ public:
             }
             /**/ });
 
+        subscribe("device-version-manager/update-available-for", [this](String deviceId)
+                  {
+            if (!deviceId.equals(id))
+                return;
+
+            updateFirmware();
+            /**/ });
+
         reconnect();
 
         // __insert-discovery-publish
+
+        char hashStr[MD5_HASH_SIZE * 2 + 1];
+        calculateHash(hashStr);
+
+        publish(("device-version-manager/register/" + id).c_str(), (String(hashStr) + " " + availabilityTopic).c_str(), true);
     }
 
     void loop()
