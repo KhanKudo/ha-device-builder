@@ -483,9 +483,20 @@ outputHeader = outputHeader.replace('// __insert-discovery-publish\r\n', haMqttJ
 // write the output file
 fs.writeFileSync('include/ha-device.h', outputHeader)
 
+const libDeps = [
+    'knolleary/PubSubClient@^2.8',
+]
+
+if (device.time === true)
+    libDeps.push('ropg/ezTime@^0.8.3')
+if (device.features.some(feature => feature.class === 'light'))
+    libDeps.push('bblanchon/ArduinoJson@^6.21.3')
+
 // add the ArduinoOTA upload port to platformio.ini, if not already present
 if (fs.existsSync('platformio.ini')) {
-    const iniFile = fs.readFileSync('platformio.ini').toString()
+    let isModified = false
+
+    let iniFile = fs.readFileSync('platformio.ini').toString()
     const host = `${toCodeName(device.name)}.local`
     // check if hostname is active, otherwise don't add it, may be the initial upload, so the device has a blank project, no ArduinoOTA
     dns.lookup(host, 4, (err, address) => {
@@ -493,11 +504,53 @@ if (fs.existsSync('platformio.ini')) {
 
         // if there is no upload_port, then just append one to the end of the file
         if (!iniFile.includes('upload_port = ')) {
-            fs.appendFileSync('platformio.ini', `upload_port = ${host}\n`)
+            if (!iniFile.endsWith('\n'))
+                iniFile += '\n'
+            iniFile += `upload_port = ${host}\n`
+
+            isModified = true
         }
         // if there is an upload_port already present, then check if it's the same as the currectly suggested one, if so, don't do anything, otherwise overwrite it
         else if (!iniFile.includes(`upload_port = ${host}`)) {
-            fs.writeFileSync('platformio.ini', iniFile.split('\n').map(line => line.includes('upload_port = ') ? `upload_port = ${host}` : line).join('\n'))
+            iniFile = iniFile.replace(/upload_port\s?=\s?.+\n/g, `upload_port = ${host}\n`)
+            isModified = true
         }
     })
+
+    const libDepsRegex = /(?:lib_deps\s*=\s*)((?:\r?\n+\s+\S+)+)/
+
+    if (iniFile.includes('lib_deps')) {
+        const libs = iniFile.match(libDepsRegex)[1]
+
+        /** @type {Map<string, string>} */
+        const versions = new Map()
+
+        libDeps.push(...libs.replace(/[\r\t]/g, '').split('\n').filter(lib => lib !== ''))
+
+        libDeps.forEach(lib => {
+            const [name, version] = lib.split('@')
+            if (!versions.has(name) || parseInt(versions.get(name).replace(/\D/g, '')) < parseInt(version.replace(/\D/g, ''))) {
+                versions.set(name, version)
+            }
+        })
+
+        libDeps.length = 0
+        versions.forEach((version, name) => libDeps.push(`${name}@${version}`))
+        libDeps.sort()
+
+        const newIniFile = iniFile.replace(new RegExp(libDepsRegex, 'g'), `lib_deps =\n\t${libDeps.join('\n\t')}\n`)
+
+        if (newIniFile !== iniFile) {
+            isModified = true
+            iniFile = newIniFile
+        }
+    }
+    else {
+        libDeps.sort()
+        iniFile += `\nlib_deps =\n\t${libDeps.join('\n\t')}\n`
+        isModified = true
+    }
+
+    if (isModified === true)
+        fs.writeFileSync('platformio.ini', iniFile)
 }
