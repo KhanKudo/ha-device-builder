@@ -515,47 +515,47 @@ if (fs.existsSync('platformio.ini')) {
             iniFile = iniFile.replace(/upload_port\s?=\s?.+\n/g, `upload_port = ${host}\n`)
             isModified = true
         }
-    })
 
-    const libDepsRegex = /(?:lib_deps\s*=\s*)((?:\r?\n+\s+\S+)+)/
+        const libDepsRegex = /(?:lib_deps\s*=\s*)((?:\r?\n+\s+\S+)+)/
 
-    if (iniFile.includes('lib_deps')) {
-        const libs = iniFile.match(libDepsRegex)[1]
+        if (iniFile.includes('lib_deps')) {
+            const libs = iniFile.match(libDepsRegex)[1]
 
-        /** @type {Map<string, string>} */
-        const versions = new Map()
+            /** @type {Map<string, string>} */
+            const versions = new Map()
 
-        libDeps.push(...libs.replace(/[\r\t]/g, '').split('\n').filter(lib => lib !== ''))
+            libDeps.push(...libs.replace(/[\r\t]/g, '').split('\n').filter(lib => lib !== ''))
 
-        libDeps.forEach(lib => {
-            const [name, version] = lib.split('@')
-            if (!versions.has(name) || parseInt(versions.get(name).replace(/\D/g, '')) < parseInt(version.replace(/\D/g, ''))) {
-                versions.set(name, version)
+            libDeps.forEach(lib => {
+                const [name, version] = lib.split('@')
+                if (!versions.has(name) || parseInt(versions.get(name).replace(/\D/g, '')) < parseInt(version.replace(/\D/g, ''))) {
+                    versions.set(name, version)
+                }
+            })
+
+            libDeps.length = 0
+            versions.forEach((version, name) => libDeps.push(`${name}@${version}`))
+            libDeps.sort()
+
+            const newIniFile = iniFile.replace(new RegExp(libDepsRegex, 'g'), `lib_deps =\n\t${libDeps.join('\n\t')}`)
+
+            if (newIniFile !== iniFile) {
+                isModified = true
+                iniFile = newIniFile
+
+                if (!iniFile.endsWith('\n'))
+                    iniFile += '\n'
             }
-        })
-
-        libDeps.length = 0
-        versions.forEach((version, name) => libDeps.push(`${name}@${version}`))
-        libDeps.sort()
-
-        const newIniFile = iniFile.replace(new RegExp(libDepsRegex, 'g'), `lib_deps =\n\t${libDeps.join('\n\t')}`)
-
-        if (newIniFile !== iniFile) {
-            isModified = true
-            iniFile = newIniFile
-
+        }
+        else {
+            libDeps.sort()
             if (!iniFile.endsWith('\n'))
                 iniFile += '\n'
+            iniFile += `lib_deps =\n\t${libDeps.join('\n\t')}\n`
+            isModified = true
         }
-    }
-    else {
-        libDeps.sort()
-        if (!iniFile.endsWith('\n'))
-            iniFile += '\n'
-        iniFile += `lib_deps =\n\t${libDeps.join('\n\t')}\n`
-        isModified = true
-    }
 
-    if (isModified === true)
-        fs.writeFileSync('platformio.ini', iniFile)
+        if (isModified === true)
+            fs.writeFileSync('platformio.ini', iniFile)
+    })
 }
