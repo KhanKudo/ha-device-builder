@@ -538,16 +538,21 @@ if (fs.existsSync('platformio.ini')) {
         versions.forEach((version, name) => libDeps.push(`${name}@${version}`))
         libDeps.sort()
 
-        const newIniFile = iniFile.replace(new RegExp(libDepsRegex, 'g'), `lib_deps =\n\t${libDeps.join('\n\t')}\n`)
+        const newIniFile = iniFile.replace(new RegExp(libDepsRegex, 'g'), `lib_deps =\n\t${libDeps.join('\n\t')}`)
 
         if (newIniFile !== iniFile) {
             isModified = true
             iniFile = newIniFile
+
+            if (!iniFile.endsWith('\n'))
+                iniFile += '\n'
         }
     }
     else {
         libDeps.sort()
-        iniFile += `\nlib_deps =\n\t${libDeps.join('\n\t')}\n`
+        if (!iniFile.endsWith('\n'))
+            iniFile += '\n'
+        iniFile += `lib_deps =\n\t${libDeps.join('\n\t')}\n`
         isModified = true
     }
 
