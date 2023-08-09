@@ -179,8 +179,8 @@ public:
 
         if (isEncrypted)
         {
+            wifiClientSecure.setCACert(root_ca);
             client.setClient(wifiClientSecure);
-            wifiClientSecure.setInsecure();
         }
 
         WiFi.begin(ssid, password);
