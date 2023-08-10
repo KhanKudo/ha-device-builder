@@ -516,7 +516,7 @@ if (fs.existsSync('platformio.ini')) {
             isModified = true
         }
 
-        const libDepsRegex = /(?:lib_deps[ \t]*=[ \t]*)((?:(?:[ \t]*\r?\n[ \t]+)?\S+)+)/
+        const libDepsRegex = /(?:lib_deps[ \t]*=[ \t]*)((?:(?:[ \t]*\r?\n[ \t]+)?[ \S]+)+)/
 
         if (iniFile.includes('lib_deps')) {
             const libs = iniFile.match(libDepsRegex)?.[1] ?? ''
@@ -524,9 +524,11 @@ if (fs.existsSync('platformio.ini')) {
             /** @type {Map<string, string>} */
             const versions = new Map()
 
-            libDeps.push(...libs.replace(/[\r \t]/g, '').split('\n').filter(lib => lib !== ''))
+            libDeps.push(...libs.replace(/[\r\t]/g, '').split('\n').map(lib => lib.trim()).filter(lib => lib !== ''))
 
             libDeps.forEach(lib => {
+                if (!lib.includes('@'))
+                    lib += '@'
                 const [name, version] = lib.split('@')
                 if (!versions.has(name) || parseInt(versions.get(name).replace(/\D/g, '')) < parseInt(version.replace(/\D/g, ''))) {
                     versions.set(name, version)
@@ -534,7 +536,7 @@ if (fs.existsSync('platformio.ini')) {
             })
 
             libDeps.length = 0
-            versions.forEach((version, name) => libDeps.push(`${name}@${version}`))
+            versions.forEach((version, name) => version === '' ? libDeps.push(name) : libDeps.push(`${name}@${version}`))
             libDeps.sort()
 
             const newIniFile = iniFile.replace(new RegExp(libDepsRegex, 'g'), `lib_deps =\n\t${libDeps.join('\n\t')}`)
