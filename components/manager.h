@@ -47,8 +47,6 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 #elif defined(ESP8266)
 #include <ESP8266WiFi.h>
 #include <Updater.h>
-#include <WiFiClientSecureBearSSL.h>
-#include <BearSSLHelpers.h>
 #endif
 
 #ifdef TIME
@@ -74,11 +72,7 @@ private:
     std::map<uint32_t, std::function<void(void)>> timeouts;
 
     WiFiClient wifiClient;
-#ifdef ESP32
     WiFiClientSecure wifiClientSecure;
-#elif defined(ESP8266)
-    BearSSL::WiFiClientSecure wifiClientSecure;
-#endif
     PubSubClient client = PubSubClient(wifiClient);
 
     String availabilityTopic = "AVAILABILITY_TOPIC";
@@ -273,7 +267,6 @@ public:
 #ifdef ESP32
             wifiClientSecure.setCACert(root_ca);
 #elif defined(ESP8266)
-            // wifiClientSecure.setTrustAnchors(new BearSSL::X509List(root_ca));
             wifiClientSecure.setInsecure();
 #endif
             client.setClient(wifiClientSecure);
