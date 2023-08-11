@@ -3,9 +3,6 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 
-#define MD5_HASH_SIZE 16
-#include <esp_https_ota.h>
-
 const char root_ca[] PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
 MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
@@ -43,11 +40,15 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 #include <functional>
 #include <map>
 #include <WiFiClient.h>
+#ifdef ESP32
 #include <WiFiClientSecure.h>
-#ifdef ESP8266
-#include <ESP8266WiFi.h>
-#elif defined(ESP32)
 #include <WiFi.h>
+#include <esp_https_ota.h>
+#elif defined(ESP8266)
+#include <ESP8266WiFi.h>
+#include <Updater.h>
+#include <WiFiClientSecureBearSSL.h>
+#include <BearSSLHelpers.h>
 #endif
 
 #ifdef TIME
@@ -73,7 +74,11 @@ private:
     std::map<uint32_t, std::function<void(void)>> timeouts;
 
     WiFiClient wifiClient;
+#ifdef ESP32
     WiFiClientSecure wifiClientSecure;
+#elif defined(ESP8266)
+    BearSSL::WiFiClientSecure wifiClientSecure;
+#endif
     PubSubClient client = PubSubClient(wifiClient);
 
     String availabilityTopic = "AVAILABILITY_TOPIC";
@@ -130,6 +135,7 @@ private:
     {
         Serial.println("Updating firmware...");
 
+#ifdef ESP32
         String url = String("https://") + String(_broker) + String("/update?id=") + id;
 
         esp_http_client_config_t config = {
@@ -150,6 +156,91 @@ private:
         {
             Serial.println("OTA update failed");
         }
+#elif defined(ESP8266)
+        // Connect to the server
+        if (wifiClientSecure.connect(_broker, 443))
+        {
+            Serial.println("Connected to server");
+
+            // Make an HTTP GET request
+            wifiClientSecure.print(String("GET ") + String("/update?id=") + id + " HTTP/1.1\r\n" +
+                                   "Host: " + String(_broker) + "\r\n" +
+                                   "Connection: close\r\n\r\n");
+
+            size_t contentLength = 0;
+            // Read the response headers
+            while (wifiClientSecure.connected())
+            {
+                String line = wifiClientSecure.readStringUntil('\n');
+                if (line.startsWith("Content-Length: "))
+                {
+                    line.trim();
+                    contentLength = line.substring(16).toInt();
+                }
+                if (line == "\r")
+                {
+                    Serial.println("\nResponse headers received");
+                    break;
+                }
+            }
+
+            // Print the size of the content extracted from the headers
+            Serial.print("Content Length: ");
+            Serial.println(contentLength);
+
+            size_t totalBytesRead = 0;
+            uint8_t value = 0;
+
+            Update.begin(contentLength);
+
+            while (wifiClientSecure.connected() && totalBytesRead < contentLength)
+            {
+                if (!wifiClientSecure.available())
+                {
+                    delay(1);
+                    continue;
+                }
+
+                yield();
+
+                value = wifiClientSecure.read();
+
+                if (Update.write(&value, 1))
+                {
+                    totalBytesRead++;
+                }
+                else
+                {
+                    Serial.println("Error writing firmware");
+                    break;
+                }
+            }
+            Serial.print('\n');
+
+            // Close the connection
+            wifiClientSecure.stop();
+
+            if (totalBytesRead < contentLength || !Update.end())
+            {
+                Serial.println("Failed to update firmware");
+                Serial.print("Firmware downloaded: ");
+                Serial.print(totalBytesRead);
+                Serial.println(" Bytes");
+            }
+            else
+            {
+                Serial.println("OTA update successful, rebooting...");
+
+                delay(1000);
+
+                ESP.restart();
+            }
+        }
+        else
+        {
+            Serial.println("Connection to server failed");
+        }
+#endif
     }
 
     const char *_ssid;
@@ -179,7 +270,12 @@ public:
 
         if (isEncrypted)
         {
+#ifdef ESP32
             wifiClientSecure.setCACert(root_ca);
+#elif defined(ESP8266)
+            // wifiClientSecure.setTrustAnchors(new BearSSL::X509List(root_ca));
+            wifiClientSecure.setInsecure();
+#endif
             client.setClient(wifiClientSecure);
         }
 
