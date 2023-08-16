@@ -2,7 +2,9 @@
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
+#include <WebSocketsClient.h>
 
+#ifdef ESP32
 const char root_ca[] PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
 MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
@@ -36,6 +38,7 @@ mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
 emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 -----END CERTIFICATE-----
 )EOF";
+#endif
 
 #include <functional>
 #include <map>
@@ -43,10 +46,10 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 #ifdef ESP32
 #include <WiFiClientSecure.h>
 #include <WiFi.h>
-#include <esp_https_ota.h>
 #elif defined(ESP8266)
 #include <ESP8266WiFi.h>
 #include <Updater.h>
+#include <Hash.h>
 #endif
 
 #ifdef TIME
@@ -74,10 +77,26 @@ private:
     WiFiClient wifiClient;
     WiFiClientSecure wifiClientSecure;
     PubSubClient client = PubSubClient(wifiClient);
+    WebSocketsClient webSocket;
 
     String availabilityTopic = "AVAILABILITY_TOPIC";
 
     uint32_t timeoutLoopLimiter = 0;
+
+    const struct
+    {
+        String RESTART_DEVICE = "RESTART_DEVICE";
+        String REGISTER = "REGISTER";
+        String AWAITING_UPDATE_SIZE = "AWAITING_UPDATE_SIZE";
+        String UPDATE_SIZE = "UPDATE_SIZE"; // UPDATE_SIZE ${SIZE in bytes}
+        String START_OTA = "START_OTA";
+        String END_OTA = "END_OTA";
+        String START_DATA_UPLOAD = "START_DATA_UPLOAD";
+        String UPDATE_SUCCESSFUL = "UPDATE_SUCCESSFUL";
+        String NEXT_CHUNK = "NEXT_CHUNK";
+        String OK = "OK";
+        String ERROR = "ERROR";
+    } WebSocketType;
 
     std::function<void(char *, byte *, unsigned int)> callback = [this](char *char_topic, byte *payload, unsigned int length)
     {
@@ -110,6 +129,141 @@ private:
         }
     }
 
+    bool attemptingUpdate = false;
+    bool isUpdating = false;
+    bool waitingForUpdateSize = false;
+
+    // Define a lambda that calls the original function
+    std::function<void(WStype_t, uint8_t *, size_t)> webSocketEvent = [this](WStype_t type, uint8_t *payload, size_t length)
+    {
+        switch (type)
+        {
+        case WStype_DISCONNECTED:
+            Serial.printf("[WSc] Disconnected!\n");
+
+            if (isUpdating)
+            {
+#ifdef ESP32
+                Update.abort();
+#endif
+
+                isUpdating = false;
+            }
+
+            waitingForUpdateSize = false;
+            break;
+        case WStype_CONNECTED:
+        {
+            Serial.printf("[WSc] Connected to url: %s\n", payload);
+
+            // send message to server when connected
+            String registerStr = String(WebSocketType.REGISTER);
+            registerStr.concat(" ");
+            registerStr.concat(id);
+            registerStr.concat(" ");
+            registerStr.concat("HA_DEVICE_PLACEHOLDER_HASH");
+
+            webSocket.sendTXT(registerStr);
+        }
+        break;
+        case WStype_TEXT:
+        {
+            Serial.printf("[WSc] get text: %s\n", payload);
+            String msg = String((char *)payload);
+
+            if (msg.equals(WebSocketType.START_OTA))
+            {
+                if (isUpdating || waitingForUpdateSize)
+                {
+                    webSocket.sendTXT(WebSocketType.ERROR.c_str()); // an update is already in progress
+                }
+                else
+                {
+                    waitingForUpdateSize = true;
+                    webSocket.sendTXT(WebSocketType.AWAITING_UPDATE_SIZE.c_str());
+                }
+            }
+            else if (msg.equals(WebSocketType.END_OTA))
+            {
+                if (!isUpdating)
+                {
+                    webSocket.sendTXT(WebSocketType.ERROR.c_str()); // no update is currently active
+                }
+                else
+                {
+                    isUpdating = false;
+
+                    if (Update.end())
+                    {
+                        webSocket.sendTXT(WebSocketType.UPDATE_SUCCESSFUL.c_str());
+                        delay(2500);
+                        webSocket.disconnect();
+                        delay(500);
+                        ESP.restart();
+                    }
+                    else
+                    {
+                        webSocket.sendTXT(WebSocketType.ERROR.c_str());
+                    }
+                }
+            }
+            else if (waitingForUpdateSize && msg.startsWith(WebSocketType.UPDATE_SIZE))
+            {
+                size_t updateSize = msg.substring(WebSocketType.UPDATE_SIZE.length()).toInt();
+
+                if (Update.begin(updateSize))
+                {
+                    isUpdating = true;
+                    waitingForUpdateSize = false;
+                    webSocket.sendTXT(WebSocketType.START_DATA_UPLOAD.c_str());
+                }
+                else
+                {
+                    Update.printError(Serial);
+                    webSocket.sendTXT(WebSocketType.ERROR.c_str());
+                }
+            }
+            else if (msg.equals(WebSocketType.RESTART_DEVICE))
+            {
+                Serial.printf("RESTART_DEVICE command received\n");
+                Serial.printf("Restarting...\n");
+
+                // WiFi.reconnect();
+                ESP.restart();
+            }
+            break;
+        }
+        case WStype_BIN:
+            Serial.printf("[WSc] get binary length: %u\n", (uint)length);
+            // hexdump(payload, length);
+
+            if (isUpdating)
+            {
+                if (Update.write(payload, length) == length)
+                {
+                    webSocket.sendTXT(WebSocketType.NEXT_CHUNK.c_str());
+                }
+                else
+                {
+                    Update.printError(Serial);
+                    webSocket.sendTXT(WebSocketType.ERROR.c_str());
+                }
+            }
+            break;
+        case WStype_PING:
+            // pong will be send automatically
+            // Serial.printf("[WSc] get ping\n");
+            break;
+        case WStype_PONG:
+            // answer to a ping we send
+            // Serial.printf("[WSc] get pong\n");
+            break;
+        default:
+            Serial.printf("[WSc] get unrecognised message type\n");
+            break;
+        }
+    };
+
     void connected()
     {
         client.subscribe("homeassistant/status");
@@ -128,113 +282,21 @@ private:
     void updateFirmware()
     {
         Serial.println("Updating firmware...");
+        attemptingUpdate = true;
+
+        Serial.println("Disconnecting from MQTT server...");
+        client.disconnect();
+
+        Serial.println("Connecting to WebSocket server...");
 
 #ifdef ESP32
-        String url = String("https://") + String(_broker) + String("/update?id=") + id;
-
-        esp_http_client_config_t config = {
-            .url = url.c_str(),
-            .auth_type = HTTP_AUTH_TYPE_NONE,
-            .cert_pem = root_ca,
-            .method = HTTP_METHOD_GET,
-        };
-
-        esp_err_t err = esp_https_ota(&config);
-
-        if (err == ESP_OK)
-        {
-            Serial.println("OTA update successful");
-            esp_restart();
-        }
-        else
-        {
-            Serial.println("OTA update failed");
-        }
+        webSocket.beginSslWithCA(_broker, 443, "/ws", root_ca);
 #elif defined(ESP8266)
-        // Connect to the server
-        if (wifiClientSecure.connect(_broker, 443))
-        {
-            Serial.println("Connected to server");
-
-            // Make an HTTP GET request
-            wifiClientSecure.print(String("GET ") + String("/update?id=") + id + " HTTP/1.1\r\n" +
-                                   "Host: " + String(_broker) + "\r\n" +
-                                   "Connection: close\r\n\r\n");
-
-            size_t contentLength = 0;
-            // Read the response headers
-            while (wifiClientSecure.connected())
-            {
-                String line = wifiClientSecure.readStringUntil('\n');
-                if (line.startsWith("Content-Length: "))
-                {
-                    line.trim();
-                    contentLength = line.substring(16).toInt();
-                }
-                if (line == "\r")
-                {
-                    Serial.println("\nResponse headers received");
-                    break;
-                }
-            }
-
-            // Print the size of the content extracted from the headers
-            Serial.print("Content Length: ");
-            Serial.println(contentLength);
-
-            size_t totalBytesRead = 0;
-            uint8_t value = 0;
-
-            Update.begin(contentLength);
-
-            while (wifiClientSecure.connected() && totalBytesRead < contentLength)
-            {
-                if (!wifiClientSecure.available())
-                {
-                    delay(1);
-                    continue;
-                }
-
-                yield();
-
-                value = wifiClientSecure.read();
-
-                if (Update.write(&value, 1))
-                {
-                    totalBytesRead++;
-                }
-                else
-                {
-                    Serial.println("Error writing firmware");
-                    break;
-                }
-            }
-            Serial.print('\n');
-
-            // Close the connection
-            wifiClientSecure.stop();
-
-            if (totalBytesRead < contentLength || !Update.end())
-            {
-                Serial.println("Failed to update firmware");
-                Serial.print("Firmware downloaded: ");
-                Serial.print(totalBytesRead);
-                Serial.println(" Bytes");
-            }
-            else
-            {
-                Serial.println("OTA update successful, rebooting...");
-
-                delay(1000);
-
-                ESP.restart();
-            }
-        }
-        else
-        {
-            Serial.println("Connection to server failed");
-        }
+        webSocket.beginSSL(_broker, 443, "/ws");
 #endif
+        webSocket.onEvent(webSocketEvent);
+        // webSocket.setReconnectInterval(5000);
+        // webSocket.enableHeartbeat(15000, 3000, 2);
     }
 
     const char *_ssid;
@@ -272,6 +334,8 @@ public:
             client.setClient(wifiClientSecure);
         }
 
+        WiFi.mode(WIFI_STA);
+        WiFi.setAutoReconnect(true);
         WiFi.begin(ssid, password);
 
 #ifndef TIME
@@ -350,7 +414,7 @@ public:
         if (!WiFi.isConnected())
             return;
 
-        if (!client.connected())
+        if (!attemptingUpdate && !client.connected())
         {
             if (restartTimeout == 0)
             {
@@ -361,13 +425,16 @@ public:
         }
         else
         {
-            if (restartTimeout == 0)
+            if (restartTimeout != 0)
             {
                 restartTimeout = 0;
             }
         }
 
-        client.loop();
+        if (attemptingUpdate)
+            webSocket.loop();
+        else
+            client.loop();
 
         ArduinoOTA.handle();
 

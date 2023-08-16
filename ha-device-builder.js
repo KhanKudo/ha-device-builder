@@ -485,8 +485,11 @@ fs.writeFileSync('include/ha-device.h', outputHeader)
 
 const libDeps = [
     'knolleary/PubSubClient@^2.8',
+    'links2004/WebSockets@^2.4.1',
 ]
 
+if (device.model !== 'esp32')
+    libDeps.push('Hash')
 if (device.time === true)
     libDeps.push('ropg/ezTime@^0.8.3')
 if (device.features.some(feature => feature.class === 'light'))

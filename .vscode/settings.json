@@ -44,6 +44,24 @@
         "random": "cpp",
         "*.tcc": "cpp",
         "fstream": "cpp",
-        "ostream": "cpp"
+        "ostream": "cpp",
+        "string_view": "cpp",
+        "array": "cpp",
+        "clocale": "cpp",
+        "cmath": "cpp",
+        "cstddef": "cpp",
+        "cstdlib": "cpp",
+        "cstring": "cpp",
+        "ctime": "cpp",
+        "cwctype": "cpp",
+        "exception": "cpp",
+        "memory_resource": "cpp",
+        "numeric": "cpp",
+        "tuple": "cpp",
+        "type_traits": "cpp",
+        "initializer_list": "cpp",
+        "new": "cpp",
+        "stdexcept": "cpp",
+        "cinttypes": "cpp"
     }
 }
