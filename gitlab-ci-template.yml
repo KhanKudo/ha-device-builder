@@ -1,0 +1,33 @@
+stages:
+  - build
+
+variables:
+  prod_path: /var/ota-firmware-service/bin
+
+build-job:
+    stage: build
+    script:
+        - echo "Compiling firmware..."
+        - test -e "include/ha-device.h" || exit 1
+        - if [ ! "$(find . -type f -name '*.ha-device.yaml')" ]; then exit 1; fi
+        - |
+            sed -i "s/HA_DEVICE_PLACEHOLDER_HASH/$CI_COMMIT_SHA/g" "include/ha-device.h"
+            pio run
+            failed=$?
+            if [ "$failed" = "0" ]; then
+                first_dir=$(ls -d .pio/build/*/ | grep -m 1 .)
+                if [ -n "$first_dir" ] && [ -f "$first_dir/firmware.bin" ]; then
+                    short_repo_name=$(echo "$CI_REPOSITORY_URL" | sed 's|.*/\([^/]*\)\.git$|\1|')
+                    device_id=$(sed -n '/identifiers:/,/^$/s/identifiers: *\(.*\)/\1/p' *.ha-device.yaml)
+                    cp "$first_dir/firmware.bin" "$prod_path/$short_repo_name.bin"
+                    echo -n "$CI_COMMIT_SHA" > "$prod_path/$short_repo_name.hash"
+                    echo -n "$device_id" > "$prod_path/$short_repo_name.csv"
+                else
+                    echo "Failed to find compiled 'firmware.bin' file."
+                    exit 1
+                fi
+            else
+                echo "Failed to compile Project."
+                exit 1
+            fi
+        - echo "Compiled firmware."
