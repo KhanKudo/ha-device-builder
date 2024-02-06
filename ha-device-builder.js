@@ -500,10 +500,57 @@ if (fs.existsSync('platformio.ini')) {
     let isModified = false
 
     let iniFile = fs.readFileSync('platformio.ini').toString()
+
+    const libDepsRegex = /(?:lib_deps[ \t]*=[ \t]*)((?:(?:[ \t]*\r?\n[ \t]+)?[ \S]+)+)/
+
+    if (iniFile.includes('lib_deps')) {
+        const libs = iniFile.match(libDepsRegex)?.[1] ?? ''
+
+        /** @type {Map<string, string>} */
+        const versions = new Map()
+
+        libDeps.push(...libs.replace(/[\r\t]/g, '').split('\n').map(lib => lib.trim()).filter(lib => lib !== ''))
+
+        libDeps.forEach(lib => {
+            if (!lib.includes('@'))
+                lib += '@'
+            const [name, version] = lib.split('@')
+            if (!versions.has(name) || parseInt(versions.get(name).replace(/\D/g, '')) < parseInt(version.replace(/\D/g, ''))) {
+                versions.set(name, version)
+            }
+        })
+
+        libDeps.length = 0
+        versions.forEach((version, name) => version === '' ? libDeps.push(name) : libDeps.push(`${name}@${version}`))
+        libDeps.sort()
+
+        const newIniFile = iniFile.replace(new RegExp(libDepsRegex, 'g'), `lib_deps =\n\t${libDeps.join('\n\t')}`)
+
+        if (newIniFile !== iniFile) {
+            isModified = true
+            iniFile = newIniFile
+
+            if (!iniFile.endsWith('\n'))
+                iniFile += '\n'
+        }
+    }
+    else {
+        libDeps.sort()
+        if (!iniFile.endsWith('\n'))
+            iniFile += '\n'
+        iniFile += `lib_deps =\n\t${libDeps.join('\n\t')}\n`
+        isModified = true
+    }
+
+    let fileWasWritten = false
+
     const host = `${toCodeName(device.name)}.local`
     // check if hostname is active, otherwise don't add it, may be the initial upload, so the device has a blank project, no ArduinoOTA
     dns.lookup(host, 4, (err, address) => {
         if (err) return
+
+        // if (fileWasWritten) return
+        fileWasWritten = true
 
         // if there is no upload_port, then just append one to the end of the file
         if (!iniFile.includes('upload_port = ')) {
@@ -519,50 +566,18 @@ if (fs.existsSync('platformio.ini')) {
             isModified = true
         }
 
-        const libDepsRegex = /(?:lib_deps[ \t]*=[ \t]*)((?:(?:[ \t]*\r?\n[ \t]+)?[ \S]+)+)/
+        if (isModified === true)
+            fs.writeFileSync('platformio.ini', iniFile)
 
-        if (iniFile.includes('lib_deps')) {
-            const libs = iniFile.match(libDepsRegex)?.[1] ?? ''
+    })
 
-            /** @type {Map<string, string>} */
-            const versions = new Map()
-
-            libDeps.push(...libs.replace(/[\r\t]/g, '').split('\n').map(lib => lib.trim()).filter(lib => lib !== ''))
-
-            libDeps.forEach(lib => {
-                if (!lib.includes('@'))
-                    lib += '@'
-                const [name, version] = lib.split('@')
-                if (!versions.has(name) || parseInt(versions.get(name).replace(/\D/g, '')) < parseInt(version.replace(/\D/g, ''))) {
-                    versions.set(name, version)
-                }
-            })
-
-            libDeps.length = 0
-            versions.forEach((version, name) => version === '' ? libDeps.push(name) : libDeps.push(`${name}@${version}`))
-            libDeps.sort()
-
-            const newIniFile = iniFile.replace(new RegExp(libDepsRegex, 'g'), `lib_deps =\n\t${libDeps.join('\n\t')}`)
-
-            if (newIniFile !== iniFile) {
-                isModified = true
-                iniFile = newIniFile
-
-                if (!iniFile.endsWith('\n'))
-                    iniFile += '\n'
-            }
-        }
-        else {
-            libDeps.sort()
-            if (!iniFile.endsWith('\n'))
-                iniFile += '\n'
-            iniFile += `lib_deps =\n\t${libDeps.join('\n\t')}\n`
-            isModified = true
-        }
+    setTimeout(() => {
+        if (fileWasWritten) return
+        fileWasWritten = true
 
         if (isModified === true)
             fs.writeFileSync('platformio.ini', iniFile)
-    })
+    }, 1000)
 }
 
 // add the default gitlab auto-update pipeline config, if not already present
