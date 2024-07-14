@@ -314,7 +314,7 @@ public:
     Timezone time;
 #endif
 
-    void init(const char *ssid = "wifi-user", const char *password = "wifi-pass", const char *broker = "example.com", bool isEncrypted = true, uint port = 8885, const char *user = "user-fFXBzVQtm9NxQJmjc7F4CCVdowi7sDp4Js7q8g3jxKyZjddeVEUe7vxqxrmQUkDPax7MkJfwLabUHKjzdftuYYdbYavuCsPyJtjvFKfsak5bsksQ4ZPWD3bKb9QU6PZQ", const char *pass = "3oE5thSHgyK6DjMbFSyNCDZUAwrKQp6Q5cL3pEBLGXtzmJDaXm7keYmWi25dRRJUsouxrAN8tjnV4FZu74NbFAgUiAnFkXeiRBqPPgauhdmTbSBbLzZrxPyKv9g4oFwj")
+    void init(const char *ssid = "wifi-user", const char *password = "wifi-pass", const char *broker = "example.com", bool isEncrypted = true, uint port = 8885, const char *user = "mqtt-user", const char *pass = "mqtt-pass")
     {
         _ssid = ssid;
         _password = password;
