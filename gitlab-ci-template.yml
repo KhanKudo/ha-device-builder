@@ -2,7 +2,7 @@ stages:
   - build
 
 variables:
-  prod_path: /var/ota-firmware-service/bin
+  prod_path: "$CI_BUILDS_DIR/../production/ota-firmware-service/bin"
 
 build-job:
     stage: build
