@@ -580,10 +580,10 @@ if (fs.existsSync('platformio.ini')) {
     }, 1000)
 }
 
-// add the default gitlab auto-update pipeline config, if not already present
-if (!fs.existsSync('.gitlab-ci.yml') && fs.existsSync('.git/config')) {
+// add the default gitlab auto-update pipeline config
+if (fs.existsSync('.git/config')) {
     const gitConfig = fs.readFileSync('.git/config').toString()
-    if (gitConfig.includes('https://gitlab.example.com/khankudo/')) {
+    if (gitConfig.includes('https://gitlab.example.com/mqtt-users/')) {
         fs.copyFileSync(`${__dirname}/gitlab-ci-template.yml`, '.gitlab-ci.yml')
     }
 }
