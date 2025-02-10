@@ -96,10 +96,20 @@ struct NextMillis_RGBWW
 // start-if hs_supported
 #ifndef DEF_HS
 #define DEF_HS
-struct HS
+struct Color_HS
 {
     double h;
     double s;
+};
+struct DeltaMs_HS
+{
+    uint16_t h;
+    uint16_t s;
+};
+struct NextMillis_HS
+{
+    uint32_t h;
+    uint32_t s;
 };
 #endif
 // end-if hs_supported
@@ -107,10 +117,20 @@ struct HS
 // start-if xy_supported
 #ifndef DEF_XY
 #define DEF_XY
-struct XY
+struct Color_XY
 {
     double x;
     double y;
+};
+struct DeltaMs_XY
+{
+    uint16_t x;
+    uint16_t y;
+};
+struct NextMillis_XY
+{
+    uint32_t x;
+    uint32_t y;
 };
 #endif
 // end-if xy_supported
@@ -186,13 +206,25 @@ private:
     // end-if rgbww_supported
 
     // start-if hs_supported
-    HS hs = {0, 0};
-    std::function<void(HS)> hs_listener = [](HS) {};
+    Color_HS hsTarget = {0, 0};
+    Color_HS hsStep = {0, 0};
+    DeltaMs_HS hsDeltaMs = {0, 0};
+    NextMillis_HS hsNextMillis = {0, 0};
+    bool hsTriggerListener = false;
+    uint32_t hsNextTriggerMillis = 0;
+    Color_HS hs = {0, 0};
+    std::function<void(Color_HS)> hs_listener = [](Color_HS) {};
     // end-if hs_supported
 
     // start-if xy_supported
-    XY xy = {0, 0};
-    std::function<void(XY)> xy_listener = [](XY) {};
+    Color_XY xyTarget = {0, 0};
+    Color_XY xyStep = {0, 0};
+    DeltaMs_XY xyDeltaMs = {0, 0};
+    NextMillis_XY xyNextMillis = {0, 0};
+    bool xyTriggerListener = false;
+    uint32_t xyNextTriggerMillis = 0;
+    Color_XY xy = {0, 0};
+    std::function<void(Color_XY)> xy_listener = [](Color_XY) {};
     // end-if xy_supported
 
     // start-if effects_supported
@@ -441,7 +473,24 @@ public:
 
                             // start-if hs_supported
                             if(jsonMsg.containsKey("color")){
-                                hs = {jsonMsg["color"]["h"], jsonMsg["color"]["s"]};
+                                if(jsonMsg.containsKey("transition")){
+                                    hsTarget.h = jsonMsg["color"]["h"];
+                                    if(hs.h != hsTarget.h){
+                                        hsStep.h = max(1, (int)min(abs((float)hsTarget.h - (float)hs.h), round(abs((float)hsTarget.h - (float)hs.h) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        hsDeltaMs.h = round((1000.0f * (float)jsonMsg["transition"] * (float)hsStep.h) / abs((float)hsTarget.h - (float)hs.h));
+                                        hsNextMillis.h = millis() + hsDeltaMs.h;
+                                    }
+                                    hsTarget.s = jsonMsg["color"]["s"];
+                                    if(hs.s != hsTarget.s){
+                                        hsStep.s = max(1, (int)min(abs((float)hsTarget.s - (float)hs.s), round(abs((float)hsTarget.s - (float)hs.s) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        hsDeltaMs.s = round((1000.0f * (float)jsonMsg["transition"] * (float)hsStep.s) / abs((float)hsTarget.s - (float)hs.s));
+                                        hsNextMillis.s = millis() + hsDeltaMs.s;
+                                    }
+                                }
+                                else{
+                                    hs = {jsonMsg["color"]["h"], jsonMsg["color"]["s"]};
+                                    hsStep = {0, 0};
+                                }
                                 jsonState["color"] = jsonMsg["color"];
                                 jsonState["color_mode"] = "hs";
                             }
@@ -449,7 +498,24 @@ public:
 
                             // start-if xy_supported
                             if(jsonMsg.containsKey("color")){
-                                xy = {jsonMsg["color"]["x"], jsonMsg["color"]["y"]};
+                                if(jsonMsg.containsKey("transition")){
+                                    xyTarget.x = jsonMsg["color"]["x"];
+                                    if(xy.x != xyTarget.x){
+                                        xyStep.x = max(1, (int)min(abs((float)xyTarget.x - (float)xy.x), round(abs((float)xyTarget.x - (float)xy.x) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        xyDeltaMs.x = round((1000.0f * (float)jsonMsg["transition"] * (float)xyStep.x) / abs((float)xyTarget.x - (float)xy.x));
+                                        xyNextMillis.x = millis() + xyDeltaMs.x;
+                                    }
+                                    xyTarget.y = jsonMsg["color"]["y"];
+                                    if(xy.y != xyTarget.y){
+                                        xyStep.y = max(1, (int)min(abs((float)xyTarget.y - (float)xy.y), round(abs((float)xyTarget.y - (float)xy.y) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        xyDeltaMs.y = round((1000.0f * (float)jsonMsg["transition"] * (float)xyStep.y) / abs((float)xyTarget.y - (float)xy.y));
+                                        xyNextMillis.y = millis() + xyDeltaMs.y;
+                                    }
+                                }
+                                else{
+                                    xy = {jsonMsg["color"]["x"], jsonMsg["color"]["y"]};
+                                    xyStep = {0, 0};
+                                }
                                 jsonState["color"] = jsonMsg["color"];
                                 jsonState["color_mode"] = "xy";
                             }
@@ -594,6 +660,12 @@ public:
         // start-if rgbww_supported
         needLooper = true;
         // end-if rgbww_supported
+        // start-if hs_supported
+        needLooper = true;
+        // end-if hs_supported
+        // start-if xy_supported
+        needLooper = true;
+        // end-if xy_supported
 
         if (needLooper)
             device.setLooper([this](void)
@@ -905,6 +977,102 @@ public:
                                      rgbww_listener(rgbww);
                                  }
                                  // end-if rgbww_supported
+
+                                 // start-if hs_supported
+                                 if (hsStep.h != 0 && millis() >= hsNextMillis.h)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)hsStep.h * max(1.0f, floor((float)(millis() - hsNextMillis.h) / (float)hsDeltaMs.h));
+                                     if (abs((float)hsTarget.h - (float)hs.h) <= step)
+                                     {
+                                         hs.h = hsTarget.h;
+                                         hsStep.h = 0;
+                                     }
+                                     else
+                                     {
+                                         if (hsTarget.h < hs.h)
+                                             hs.h -= step;
+                                         else
+                                             hs.h += step;
+                                         hsNextMillis.h = millis() + hsDeltaMs.h;
+                                     }
+                                     hsTriggerListener = true;
+                                 }
+                                 if (hsStep.s != 0 && millis() >= hsNextMillis.s)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)hsStep.s * max(1.0f, floor((float)(millis() - hsNextMillis.s) / (float)hsDeltaMs.s));
+                                     if (abs((float)hsTarget.s - (float)hs.s) <= step)
+                                     {
+                                         hs.s = hsTarget.s;
+                                         hsStep.s = 0;
+                                     }
+                                     else
+                                     {
+                                         if (hsTarget.s < hs.s)
+                                             hs.s -= step;
+                                         else
+                                             hs.s += step;
+                                         hsNextMillis.s = millis() + hsDeltaMs.s;
+                                     }
+                                     hsTriggerListener = true;
+                                 }
+
+                                 if (hsTriggerListener && millis() >= hsNextTriggerMillis)
+                                 {
+                                     hsTriggerListener = false;
+                                     hsNextTriggerMillis += intervalDeltaMs;
+                                     hs_listener(hs);
+                                 }
+                                 // end-if hs_supported
+
+                                 // start-if xy_supported
+                                 if (xyStep.x != 0 && millis() >= xyNextMillis.x)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)xyStep.x * max(1.0f, floor((float)(millis() - xyNextMillis.x) / (float)xyDeltaMs.x));
+                                     if (abs((float)xyTarget.x - (float)xy.x) <= step)
+                                     {
+                                         xy.x = xyTarget.x;
+                                         xyStep.x = 0;
+                                     }
+                                     else
+                                     {
+                                         if (xyTarget.x < xy.x)
+                                             xy.x -= step;
+                                         else
+                                             xy.x += step;
+                                         xyNextMillis.x = millis() + xyDeltaMs.x;
+                                     }
+                                     xyTriggerListener = true;
+                                 }
+                                 if (xyStep.y != 0 && millis() >= xyNextMillis.y)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)xyStep.y * max(1.0f, floor((float)(millis() - xyNextMillis.y) / (float)xyDeltaMs.y));
+                                     if (abs((float)xyTarget.y - (float)xy.y) <= step)
+                                     {
+                                         xy.y = xyTarget.y;
+                                         xyStep.y = 0;
+                                     }
+                                     else
+                                     {
+                                         if (xyTarget.y < xy.y)
+                                             xy.y -= step;
+                                         else
+                                             xy.y += step;
+                                         xyNextMillis.y = millis() + xyDeltaMs.y;
+                                     }
+                                     xyTriggerListener = true;
+                                 }
+
+                                 if (xyTriggerListener && millis() >= xyNextTriggerMillis)
+                                 {
+                                     xyTriggerListener = false;
+                                     xyNextTriggerMillis += intervalDeltaMs;
+                                     xy_listener(xy);
+                                 }
+                                 // end-if xy_supported
                              });
     }
 
@@ -1118,12 +1286,12 @@ public:
     // end-if rgbww_supported
 
     // start-if hs_supported
-    HS getHS()
+    Color_HS getHS()
     {
         return hs;
     }
 
-    void setHS(HS _hs)
+    void setHS(Color_HS _hs)
     {
         bool newState = _hs.h > 0 || _hs.s > 0;
 
@@ -1142,19 +1310,19 @@ public:
     }
 
     // only one listener will work, newest overwrites previous
-    void onHS(std::function<void(HS)> _listener)
+    void onHS(std::function<void(Color_HS)> _listener)
     {
         hs_listener = _listener;
     }
     // end-if hs_supported
 
     // start-if xy_supported
-    XY getXY()
+    Color_XY getXY()
     {
         return xy;
     }
 
-    void setXY(XY _xy)
+    void setXY(Color_XY _xy)
     {
         StaticJsonDocument<96> jsonDoc;
         jsonDoc["state"] = state ? "ON" : "OFF";
@@ -1171,7 +1339,7 @@ public:
     }
 
     // only one listener will work, newest overwrites previous
-    void onXY(std::function<void(XY)> _listener)
+    void onXY(std::function<void(Color_XY)> _listener)
     {
         xy_listener = _listener;
     }
