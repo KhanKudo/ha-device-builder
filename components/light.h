@@ -83,6 +83,8 @@ private:
 
     const bool retain = RETAIN;
 
+    const uint16_t intervalFreqHz = 100;
+
     bool initialSetup = true;
 
     std::function<void(bool)> state_listener = [](bool) {};
@@ -90,6 +92,10 @@ private:
     bool state = false;
 
     // start-if brightness_supported
+    UINT_RESOLUTION_T brightnessTarget = 0;
+    int32_t brightnessStep = 0;
+    uint16_t brightnessDeltaMs = 0;
+    uint32_t brightnessNextMillis = 0;
     UINT_RESOLUTION_T brightness = 0;
     std::function<void(UINT_RESOLUTION_T)> brightness_listener = [](UINT_RESOLUTION_T) {};
     // end-if brightness_supported
@@ -161,7 +167,6 @@ public:
 
         device.subscribe(commandTopic.c_str(), [this](String message)
                          {
-                            Serial.println(message);
                             deserializeJson(jsonMsg, message);
 
                             jsonState.clear();
@@ -171,16 +176,74 @@ public:
                                 return;
                             // end-if effects_supported
 
+                            if(jsonMsg.containsKey("retain-recovery") && jsonMsg["retain-recovery"] == true){
+                                if(initialSetup)
+                                    initialSetup = false;
+                                else
+                                    return;
+                            }
+
                             if(jsonMsg.containsKey("state")){
                                 if(jsonMsg["state"] != "ON" && jsonMsg["state"] != "OFF") return;
+                                
+                                bool newState = jsonMsg["state"] == "ON";
+                                if(state != newState){
+                                    state = newState;
 
-                                state = jsonMsg["state"] == "ON";
+                                    // start-if brightness_supported
+                                    if(!newState || jsonRetainedCommand.containsKey("brightness")){
+                                        if(jsonMsg.containsKey("transition")){
+                                            if(!newState && brightness != 0)
+                                                state = true;
+                                            
+                                            brightnessTarget = newState ? jsonRetainedCommand["brightness"] : 0;
+                                            if(brightness != brightnessTarget){
+                                                brightnessStep = max(1, (int)min(abs((float)brightnessTarget - (float)brightness), round(abs((float)brightnessTarget - (float)brightness) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                                brightnessDeltaMs = round((1000.0f * (float)jsonMsg["transition"] * (float)brightnessStep) / abs((float)brightnessTarget - (float)brightness));
+                                                brightnessNextMillis = millis() + brightnessDeltaMs;
+                                                if(brightnessTarget < brightness)
+                                                    brightnessStep = -brightnessStep;
+                                            }
+                                            jsonState["brightness"] = brightnessTarget;
+                                        }
+                                        else{
+                                            brightness = newState ? jsonRetainedCommand["brightness"] : 0;
+                                            jsonState["brightness"] = brightness;
+                                        }
+                                    }
+                                    // end-if brightness_supported
+                                }
                                 jsonState["state"] = jsonMsg["state"];
                             }
 
                             // start-if brightness_supported
                             if(jsonMsg.containsKey("brightness")){
-                                brightness = jsonMsg["brightness"];
+                                if(jsonMsg.containsKey("transition")){
+                                    brightnessTarget = jsonMsg["brightness"];
+                                    if(brightness != brightnessTarget){
+                                        brightnessStep = max(1, (int)min(abs((float)brightnessTarget - (float)brightness), round(abs((float)brightnessTarget - (float)brightness) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        brightnessDeltaMs = round((1000.0f * (float)jsonMsg["transition"] * (float)brightnessStep) / abs((float)brightnessTarget - (float)brightness));
+                                        brightnessNextMillis = millis() + brightnessDeltaMs;
+                                        if(brightnessTarget < brightness)
+                                            brightnessStep = -brightnessStep;
+                                    }
+                                    else if(brightness == 0){
+                                        state = false;
+                                    }
+                                }
+                                else{
+                                    brightness = jsonMsg["brightness"];
+                                    if(brightness == 0)
+                                        state = false;
+                                    brightnessStep = 0;
+                                }
+                                
+                                if(jsonMsg["brightness"] == 0)
+                                    jsonState["state"] = "OFF";
+                                else if(!state){
+                                    state = true;
+                                    jsonState["state"] = "ON";
+                                }
                                 jsonState["brightness"] = jsonMsg["brightness"];
                             }
                             // end-if brightness_supported
@@ -240,62 +303,55 @@ public:
                             }
                             // end-if effects_supported
 
-                            if(jsonMsg.containsKey("retain-recovery") && jsonMsg["retain-recovery"] == true){
-                                if(initialSetup)
-                                    initialSetup = false;
-                                else
-                                    return;
-                            }
-
                             // start-if color_temp_supported
-                            if(jsonMsg.containsKey("color_temp")){
+                            if(jsonState.containsKey("color_temp")){
                                 color_temp_listener(color_temp);
                             }
                             // end-if color_temp_supported
 
                             // start-if rgb_supported
-                            if(jsonMsg.containsKey("color")){
+                            if(jsonState.containsKey("color")){
                                 rgb_listener(rgb);
                             }
                             // end-if rgb_supported
 
                             // start-if rgbw_supported
-                            if(jsonMsg.containsKey("color")){
+                            if(jsonState.containsKey("color")){
                                 rgbw_listener(rgbw);
                             }
                             // end-if rgbw_supported
 
                             // start-if rgbww_supported
-                            if(jsonMsg.containsKey("color")){
+                            if(jsonState.containsKey("color")){
                                 rgbww_listener(rgbww);
                             }
                             // end-if rgbww_supported
 
                             // start-if hs_supported
-                            if(jsonMsg.containsKey("color")){
+                            if(jsonState.containsKey("color")){
                                 hs_listener(hs);
                             }
                             // end-if hs_supported
 
                             // start-if xy_supported
-                            if(jsonMsg.containsKey("color")){
+                            if(jsonState.containsKey("color")){
                                 xy_listener(xy);
                             }
                             // end-if xy_supported
 
                             // start-if effects_supported
-                            if(jsonMsg.containsKey("effect")){
+                            if(jsonState.containsKey("effect")){
                                 effect_listener(effect);
                             }
                             // end-if effects_supported
 
                             // start-if brightness_supported
-                            if(jsonMsg.containsKey("brightness")){
+                            if(jsonState.containsKey("brightness") && !jsonMsg.containsKey("transition")){
                                 brightness_listener(brightness);
                             }
                             // end-if brightness_supported
 
-                            if(jsonMsg.containsKey("state")){
+                            if(jsonState.containsKey("state")){
                                 state_listener(state);
                             }
 
@@ -304,9 +360,11 @@ public:
                             device.publish(stateTopic.c_str(), responseMsg, retain);
 
                             if(retain){
-                                jsonRetainedCommand["state"] = state ? "ON" : "OFF";
+                                if(jsonMsg.containsKey("state"))
+                                    jsonRetainedCommand["state"] = jsonMsg["state"];
                             // start-if brightness_supported
-                                jsonRetainedCommand["brightness"] = brightness;
+                                if(jsonMsg.containsKey("brightness"))
+                                    jsonRetainedCommand["brightness"] = jsonMsg["brightness"];
                             // end-if brightness_supported
                             // start-if color_temp_supported
                                 jsonRetainedCommand["color_temp"] = color_temp;
@@ -351,6 +409,29 @@ public:
                                     device.publish(commandTopic.c_str(), "{\"state\":\"OFF\"}", retain);
                                 });
                             } });
+
+        // start-if brightness_supported
+        device.setLooper([this](void)
+                         {
+            if(brightnessStep != 0 && millis()>=brightnessNextMillis){
+                // mult to compensate for potential loop-lag, causing multiple trigger skips
+                const float step = (float)brightnessStep*max(1.0f,floor((float)(millis()-brightnessNextMillis)/(float)brightnessDeltaMs));
+                if(abs((float)brightnessTarget - (float)brightness) <= abs(step)){
+                    brightness=brightnessTarget;
+                    brightnessStep=0;
+                }
+                else{
+                    brightness+=step;
+                    brightnessNextMillis = millis() + brightnessDeltaMs;
+                }
+                brightness_listener(brightness);
+                
+                if(brightness == 0){
+                    state = false;
+                    state_listener(state);
+                }
+            } });
+        // end-if brightness_supported
     }
 
     bool getState()

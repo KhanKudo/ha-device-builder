@@ -42,6 +42,7 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 
 #include <functional>
 #include <map>
+#include <vector>
 #include <WiFiClient.h>
 #ifdef ESP32
 #include <WiFiClientSecure.h>
@@ -59,6 +60,13 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 struct _HA_DEVICE
 {
 private:
+    struct Interval
+    {
+        uint32_t nextMillis;
+        uint16_t ms;
+        std::function<void(void)> func;
+    };
+
     bool serverStatus = true;
 
     String name = "NAME";
@@ -73,6 +81,8 @@ private:
     std::function<void(void)> onServerOfflineListener = []() {};
 
     std::map<uint32_t, std::function<void(void)>> timeouts;
+    std::vector<_HA_DEVICE::Interval> intervals;
+    std::vector<std::function<void(void)>> loopers;
 
     WiFiClient wifiClient;
     WiFiClientSecure wifiClientSecure;
@@ -82,6 +92,8 @@ private:
     String availabilityTopic = "AVAILABILITY_TOPIC";
 
     uint32_t timeoutLoopLimiter = 0;
+    uint32_t intervalLoopLimiter = 0;
+    uint32_t lastMillis = 0;
 
     const struct
     {
@@ -442,6 +454,13 @@ public:
         events();
 #endif
 
+        if (millis() != lastMillis)
+        {
+            lastMillis = millis();
+            for (auto it = loopers.cbegin(); it != loopers.cend(); ++it)
+                (*it)();
+        }
+
         if (timeouts.size() > 0 && millis() > timeoutLoopLimiter)
         {
             uint32_t *passed = new uint32_t(timeouts.size());
@@ -451,7 +470,7 @@ public:
             for (auto it = timeouts.cbegin(); it != timeouts.cend(); ++it)
             {
                 yield();
-                if (cur_ms > it->first)
+                if (cur_ms >= it->first)
                 {
                     it->second();
                     passed[count] = it->first;
@@ -462,6 +481,23 @@ public:
             while (--count >= 0)
             {
                 timeouts.erase(passed[count]);
+            }
+
+            free(passed);
+        }
+
+        if (intervals.size() > 0 && millis() > intervalLoopLimiter)
+        {
+            const uint32_t cur_ms = millis();
+            intervalLoopLimiter = cur_ms + 10;
+            for (auto it = intervals.begin(); it != intervals.end(); ++it)
+            {
+                yield();
+                if (cur_ms >= it->nextMillis)
+                {
+                    it->func();
+                    it->nextMillis = cur_ms + it->ms;
+                }
             }
         }
     }
@@ -501,5 +537,18 @@ public:
     void setTimeout(uint16_t ms, std::function<void(void)> callback)
     {
         timeouts.insert(std::pair<uint32_t, std::function<void(void)>>(millis() + ms, callback));
+    }
+
+    // calls the callback roughly every N ms, resolution of up to 10ms!
+    // WARNING: once registered, cannot be unregistered!
+    void setInterval(uint16_t ms, std::function<void(void)> callback)
+    {
+        intervals.push_back({millis() + ms, ms, callback});
+    }
+
+    // add callback to be executed in the loop, at most every 1ms!
+    void setLooper(std::function<void(void)> callback)
+    {
+        loopers.push_back(callback);
     }
 } device;
