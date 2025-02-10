@@ -21,6 +21,18 @@ struct Color_RGB
     uint8_t g;
     uint8_t b;
 };
+struct DeltaMs_RGB
+{
+    uint16_t r;
+    uint16_t g;
+    uint16_t b;
+};
+struct NextMillis_RGB
+{
+    uint32_t r;
+    uint32_t g;
+    uint32_t b;
+};
 #endif
 // end-if rgb_supported
 
@@ -33,6 +45,20 @@ struct Color_RGBW
     uint8_t g;
     uint8_t b;
     uint8_t w;
+};
+struct DeltaMs_RGBW
+{
+    uint16_t r;
+    uint16_t g;
+    uint16_t b;
+    uint16_t w;
+};
+struct NextMillis_RGBW
+{
+    uint32_t r;
+    uint32_t g;
+    uint32_t b;
+    uint32_t w;
 };
 #endif
 // end-if rgbw_supported
@@ -47,6 +73,22 @@ struct Color_RGBWW
     uint8_t b;
     uint8_t c;
     uint8_t w;
+};
+struct DeltaMs_RGBWW
+{
+    uint16_t r;
+    uint16_t g;
+    uint16_t b;
+    uint16_t c;
+    uint16_t w;
+};
+struct NextMillis_RGBWW
+{
+    uint32_t r;
+    uint32_t g;
+    uint32_t b;
+    uint32_t c;
+    uint32_t w;
 };
 #endif
 // end-if rgbww_supported
@@ -84,6 +126,7 @@ private:
     const bool retain = RETAIN;
 
     const uint16_t intervalFreqHz = 100;
+    const uint8_t intervalDeltaMs = 1000 / intervalFreqHz;
 
     bool initialSetup = true;
 
@@ -93,7 +136,7 @@ private:
 
     // start-if brightness_supported
     UINT_RESOLUTION_T brightnessTarget = 0;
-    int32_t brightnessStep = 0;
+    UINT_RESOLUTION_T brightnessStep = 0;
     uint16_t brightnessDeltaMs = 0;
     uint32_t brightnessNextMillis = 0;
     UINT_RESOLUTION_T brightness = 0;
@@ -101,21 +144,43 @@ private:
     // end-if brightness_supported
 
     // start-if color_temp_supported
+    uint16_t color_temp_target = 0;
+    uint16_t color_temp_step = 0;
+    uint16_t color_temp_delta_ms = 0;
+    uint32_t color_temp_next_millis = 0;
     uint16_t color_temp = 0;
     std::function<void(uint16_t)> color_temp_listener = [](uint16_t) {};
     // end-if color_temp_supported
 
     // start-if rgb_supported
+    Color_RGB rgbTarget = {0, 0, 0};
+    Color_RGB rgbStep = {0, 0, 0};
+    DeltaMs_RGB rgbDeltaMs = {0, 0, 0};
+    NextMillis_RGB rgbNextMillis = {0, 0, 0};
+    bool rgbTriggerListener = false;
+    uint32_t rgbNextTriggerMillis = 0;
     Color_RGB rgb = {0, 0, 0};
     std::function<void(Color_RGB)> rgb_listener = [](Color_RGB) {};
     // end-if rgb_supported
 
     // start-if rgbw_supported
+    Color_RGBW rgbwTarget = {0, 0, 0, 0};
+    Color_RGBW rgbwStep = {0, 0, 0, 0};
+    DeltaMs_RGBW rgbwDeltaMs = {0, 0, 0, 0};
+    NextMillis_RGBW rgbwNextMillis = {0, 0, 0, 0};
+    bool rgbwTriggerListener = false;
+    uint32_t rgbwNextTriggerMillis = 0;
     Color_RGBW rgbw = {0, 0, 0, 0};
     std::function<void(Color_RGBW)> rgbw_listener = [](Color_RGBW) {};
     // end-if rgbw_supported
 
     // start-if rgbww_supported
+    Color_RGBWW rgbwwTarget = {0, 0, 0, 0, 0};
+    Color_RGBWW rgbwwStep = {0, 0, 0, 0, 0};
+    DeltaMs_RGBWW rgbwwDeltaMs = {0, 0, 0, 0, 0};
+    NextMillis_RGBWW rgbwwNextMillis = {0, 0, 0, 0, 0};
+    bool rgbwwTriggerListener = false;
+    uint32_t rgbwwNextTriggerMillis = 0;
     Color_RGBWW rgbww = {0, 0, 0, 0, 0};
     std::function<void(Color_RGBWW)> rgbww_listener = [](Color_RGBWW) {};
     // end-if rgbww_supported
@@ -201,8 +266,6 @@ public:
                                                 brightnessStep = max(1, (int)min(abs((float)brightnessTarget - (float)brightness), round(abs((float)brightnessTarget - (float)brightness) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
                                                 brightnessDeltaMs = round((1000.0f * (float)jsonMsg["transition"] * (float)brightnessStep) / abs((float)brightnessTarget - (float)brightness));
                                                 brightnessNextMillis = millis() + brightnessDeltaMs;
-                                                if(brightnessTarget < brightness)
-                                                    brightnessStep = -brightnessStep;
                                             }
                                             jsonState["brightness"] = brightnessTarget;
                                         }
@@ -224,8 +287,6 @@ public:
                                         brightnessStep = max(1, (int)min(abs((float)brightnessTarget - (float)brightness), round(abs((float)brightnessTarget - (float)brightness) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
                                         brightnessDeltaMs = round((1000.0f * (float)jsonMsg["transition"] * (float)brightnessStep) / abs((float)brightnessTarget - (float)brightness));
                                         brightnessNextMillis = millis() + brightnessDeltaMs;
-                                        if(brightnessTarget < brightness)
-                                            brightnessStep = -brightnessStep;
                                     }
                                     else if(brightness == 0){
                                         state = false;
@@ -250,7 +311,18 @@ public:
 
                             // start-if color_temp_supported
                             if(jsonMsg.containsKey("color_temp")){
-                                color_temp = jsonMsg["color_temp"];
+                                if(jsonMsg.containsKey("transition")){
+                                    color_temp_target = jsonMsg["color_temp"];
+                                    if(color_temp != color_temp_target){
+                                        color_temp_step = max(1, (int)min(abs((float)color_temp_target - (float)color_temp), round(abs((float)color_temp_target - (float)color_temp) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        color_temp_delta_ms = round((1000.0f * (float)jsonMsg["transition"] * (float)color_temp_step) / abs((float)color_temp_target - (float)color_temp));
+                                        color_temp_next_millis = millis() + color_temp_delta_ms;
+                                    }
+                                }
+                                else{
+                                    color_temp = jsonMsg["color_temp"];
+                                    color_temp_step = 0;
+                                }
                                 jsonState["color_temp"] = jsonMsg["color_temp"];
                                 jsonState["color_mode"] = "color_temp";
                             }
@@ -258,7 +330,30 @@ public:
 
                             // start-if rgb_supported
                             if(jsonMsg.containsKey("color")){
-                                rgb = {jsonMsg["color"]["r"], jsonMsg["color"]["g"], jsonMsg["color"]["b"]};
+                                if(jsonMsg.containsKey("transition")){
+                                    rgbTarget.r = jsonMsg["color"]["r"];
+                                    if(rgb.r != rgbTarget.r){
+                                        rgbStep.r = max(1, (int)min(abs((float)rgbTarget.r - (float)rgb.r), round(abs((float)rgbTarget.r - (float)rgb.r) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbDeltaMs.r = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbStep.r) / abs((float)rgbTarget.r - (float)rgb.r));
+                                        rgbNextMillis.r = millis() + rgbDeltaMs.r;
+                                    }
+                                    rgbTarget.g = jsonMsg["color"]["g"];
+                                    if(rgb.g != rgbTarget.g){
+                                        rgbStep.g = max(1, (int)min(abs((float)rgbTarget.g - (float)rgb.g), round(abs((float)rgbTarget.g - (float)rgb.g) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbDeltaMs.g = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbStep.g) / abs((float)rgbTarget.g - (float)rgb.g));
+                                        rgbNextMillis.g = millis() + rgbDeltaMs.g;
+                                    }
+                                    rgbTarget.b = jsonMsg["color"]["b"];
+                                    if(rgb.b != rgbTarget.b){
+                                        rgbStep.b = max(1, (int)min(abs((float)rgbTarget.b - (float)rgb.b), round(abs((float)rgbTarget.b - (float)rgb.b) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbDeltaMs.b = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbStep.b) / abs((float)rgbTarget.b - (float)rgb.b));
+                                        rgbNextMillis.b = millis() + rgbDeltaMs.b;
+                                    }
+                                }
+                                else{
+                                    rgb = {jsonMsg["color"]["r"], jsonMsg["color"]["g"], jsonMsg["color"]["b"]};
+                                    rgbStep = {0, 0, 0};
+                                }
                                 jsonState["color"] = jsonMsg["color"];
                                 jsonState["color_mode"] = "rgb";
                             }
@@ -266,7 +361,36 @@ public:
 
                             // start-if rgbw_supported
                             if(jsonMsg.containsKey("color")){
-                                rgbw = {jsonMsg["color"]["r"], jsonMsg["color"]["g"], jsonMsg["color"]["b"], jsonMsg["color"]["w"]};
+                                if(jsonMsg.containsKey("transition")){
+                                    rgbwTarget.r = jsonMsg["color"]["r"];
+                                    if(rgbw.r != rgbwTarget.r){
+                                        rgbwStep.r = max(1, (int)min(abs((float)rgbwTarget.r - (float)rgbw.r), round(abs((float)rgbwTarget.r - (float)rgbw.r) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbwDeltaMs.r = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.r) / abs((float)rgbwTarget.r - (float)rgbw.r));
+                                        rgbwNextMillis.r = millis() + rgbwDeltaMs.r;
+                                    }
+                                    rgbwTarget.g = jsonMsg["color"]["g"];
+                                    if(rgbw.g != rgbwTarget.g){
+                                        rgbwStep.g = max(1, (int)min(abs((float)rgbwTarget.g - (float)rgbw.g), round(abs((float)rgbwTarget.g - (float)rgbw.g) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbwDeltaMs.g = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.g) / abs((float)rgbwTarget.g - (float)rgbw.g));
+                                        rgbwNextMillis.g = millis() + rgbwDeltaMs.g;
+                                    }
+                                    rgbwTarget.b = jsonMsg["color"]["b"];
+                                    if(rgbw.b != rgbwTarget.b){
+                                        rgbwStep.b = max(1, (int)min(abs((float)rgbwTarget.b - (float)rgbw.b), round(abs((float)rgbwTarget.b - (float)rgbw.b) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbwDeltaMs.b = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.b) / abs((float)rgbwTarget.b - (float)rgbw.b));
+                                        rgbwNextMillis.b = millis() + rgbwDeltaMs.b;
+                                    }
+                                    rgbwTarget.w = jsonMsg["color"]["w"];
+                                    if(rgbw.w != rgbwTarget.w){
+                                        rgbwStep.w = max(1, (int)min(abs((float)rgbwTarget.w - (float)rgbw.w), round(abs((float)rgbwTarget.w - (float)rgbw.w) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbwDeltaMs.w = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.w) / abs((float)rgbwTarget.w - (float)rgbw.w));
+                                        rgbwNextMillis.w = millis() + rgbwDeltaMs.w;
+                                    }
+                                }
+                                else{
+                                    rgbw = {jsonMsg["color"]["r"], jsonMsg["color"]["g"], jsonMsg["color"]["b"], jsonMsg["color"]["w"]};
+                                    rgbwStep = {0, 0, 0, 0};
+                                }
                                 jsonState["color"] = jsonMsg["color"];
                                 jsonState["color_mode"] = "rgbw";
                             }
@@ -274,7 +398,42 @@ public:
 
                             // start-if rgbww_supported
                             if(jsonMsg.containsKey("color")){
-                                rgbww = {jsonMsg["color"]["r"], jsonMsg["color"]["g"], jsonMsg["color"]["b"], jsonMsg["color"]["c"], jsonMsg["color"]["w"]};
+                                if(jsonMsg.containsKey("transition")){
+                                    rgbwwTarget.r = jsonMsg["color"]["r"];
+                                    if(rgbww.r != rgbwwTarget.r){
+                                        rgbwwStep.r = max(1, (int)min(abs((float)rgbwwTarget.r - (float)rgbww.r), round(abs((float)rgbwwTarget.r - (float)rgbww.r) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbwwDeltaMs.r = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.r) / abs((float)rgbwwTarget.r - (float)rgbww.r));
+                                        rgbwwNextMillis.r = millis() + rgbwwDeltaMs.r;
+                                    }
+                                    rgbwwTarget.g = jsonMsg["color"]["g"];
+                                    if(rgbww.g != rgbwwTarget.g){
+                                        rgbwwStep.g = max(1, (int)min(abs((float)rgbwwTarget.g - (float)rgbww.g), round(abs((float)rgbwwTarget.g - (float)rgbww.g) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbwwDeltaMs.g = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.g) / abs((float)rgbwwTarget.g - (float)rgbww.g));
+                                        rgbwwNextMillis.g = millis() + rgbwwDeltaMs.g;
+                                    }
+                                    rgbwwTarget.b = jsonMsg["color"]["b"];
+                                    if(rgbww.b != rgbwwTarget.b){
+                                        rgbwwStep.b = max(1, (int)min(abs((float)rgbwwTarget.b - (float)rgbww.b), round(abs((float)rgbwwTarget.b - (float)rgbww.b) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbwwDeltaMs.b = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.b) / abs((float)rgbwwTarget.b - (float)rgbww.b));
+                                        rgbwwNextMillis.b = millis() + rgbwwDeltaMs.b;
+                                    }
+                                    rgbwwTarget.c = jsonMsg["color"]["c"];
+                                    if(rgbww.c != rgbwwTarget.c){
+                                        rgbwwStep.c = max(1, (int)min(abs((float)rgbwwTarget.c - (float)rgbww.c), round(abs((float)rgbwwTarget.c - (float)rgbww.c) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbwwDeltaMs.c = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.c) / abs((float)rgbwwTarget.c - (float)rgbww.c));
+                                        rgbwwNextMillis.c = millis() + rgbwwDeltaMs.c;
+                                    }
+                                    rgbwwTarget.w = jsonMsg["color"]["w"];
+                                    if(rgbww.w != rgbwwTarget.w){
+                                        rgbwwStep.w = max(1, (int)min(abs((float)rgbwwTarget.w - (float)rgbww.w), round(abs((float)rgbwwTarget.w - (float)rgbww.w) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
+                                        rgbwwDeltaMs.w = round((1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.w) / abs((float)rgbwwTarget.w - (float)rgbww.w));
+                                        rgbwwNextMillis.w = millis() + rgbwwDeltaMs.w;
+                                    }
+                                }
+                                else{
+                                    rgbww = {jsonMsg["color"]["r"], jsonMsg["color"]["g"], jsonMsg["color"]["b"], jsonMsg["color"]["c"], jsonMsg["color"]["w"]};
+                                    rgbwwStep = {0, 0, 0, 0, 0};
+                                }
                                 jsonState["color"] = jsonMsg["color"];
                                 jsonState["color_mode"] = "rgbww";
                             }
@@ -302,39 +461,41 @@ public:
                                 jsonState["effect"] = jsonMsg["effect"];
                             }
                             // end-if effects_supported
+                            
+                            // --------------------------------------------------
 
                             // start-if color_temp_supported
-                            if(jsonState.containsKey("color_temp")){
+                            if(jsonState.containsKey("color_temp") && !jsonMsg.containsKey("transition")){
                                 color_temp_listener(color_temp);
                             }
                             // end-if color_temp_supported
 
                             // start-if rgb_supported
-                            if(jsonState.containsKey("color")){
+                            if(jsonState.containsKey("color") && !jsonMsg.containsKey("transition")){
                                 rgb_listener(rgb);
                             }
                             // end-if rgb_supported
 
                             // start-if rgbw_supported
-                            if(jsonState.containsKey("color")){
+                            if(jsonState.containsKey("color") && !jsonMsg.containsKey("transition")){
                                 rgbw_listener(rgbw);
                             }
                             // end-if rgbw_supported
 
                             // start-if rgbww_supported
-                            if(jsonState.containsKey("color")){
+                            if(jsonState.containsKey("color") && !jsonMsg.containsKey("transition")){
                                 rgbww_listener(rgbww);
                             }
                             // end-if rgbww_supported
 
                             // start-if hs_supported
-                            if(jsonState.containsKey("color")){
+                            if(jsonState.containsKey("color") && !jsonMsg.containsKey("transition")){
                                 hs_listener(hs);
                             }
                             // end-if hs_supported
 
                             // start-if xy_supported
-                            if(jsonState.containsKey("color")){
+                            if(jsonState.containsKey("color") && !jsonMsg.containsKey("transition")){
                                 xy_listener(xy);
                             }
                             // end-if xy_supported
@@ -367,36 +528,43 @@ public:
                                     jsonRetainedCommand["brightness"] = jsonMsg["brightness"];
                             // end-if brightness_supported
                             // start-if color_temp_supported
-                                jsonRetainedCommand["color_temp"] = color_temp;
+                                if(jsonMsg.containsKey("color_temp"))
+                                    jsonRetainedCommand["color_temp"] = jsonMsg["color_temp"];
                             // end-if color_temp_supported
                             // start-if rgb_supported
-                                jsonRetainedCommand["color"]["r"] = rgb.r;
-                                jsonRetainedCommand["color"]["g"] = rgb.g;
-                                jsonRetainedCommand["color"]["b"] = rgb.b;
+                                if(jsonMsg.containsKey("color"))
+                                    jsonRetainedCommand["color"]["r"] = jsonMsg["color"]["r"];
+                                    jsonRetainedCommand["color"]["g"] = jsonMsg["color"]["g"];
+                                    jsonRetainedCommand["color"]["b"] = jsonMsg["color"]["b"];
                             // end-if rgb_supported
                             // start-if rgbw_supported
-                                jsonRetainedCommand["color"]["r"] = rgbw.r;
-                                jsonRetainedCommand["color"]["g"] = rgbw.g;
-                                jsonRetainedCommand["color"]["b"] = rgbw.b;
-                                jsonRetainedCommand["color"]["w"] = rgbw.w;
+                                if(jsonMsg.containsKey("color"))
+                                    jsonRetainedCommand["color"]["r"] = jsonMsg["color"]["r"];
+                                    jsonRetainedCommand["color"]["g"] = jsonMsg["color"]["g"];
+                                    jsonRetainedCommand["color"]["b"] = jsonMsg["color"]["b"];
+                                    jsonRetainedCommand["color"]["w"] = jsonMsg["color"]["w"];
                             // end-if rgbw_supported
                             // start-if rgbww_supported
-                                jsonRetainedCommand["color"]["r"] = rgbww.r;
-                                jsonRetainedCommand["color"]["g"] = rgbww.g;
-                                jsonRetainedCommand["color"]["b"] = rgbww.b;
-                                jsonRetainedCommand["color"]["c"] = rgbww.c;
-                                jsonRetainedCommand["color"]["w"] = rgbww.w;
+                                if(jsonMsg.containsKey("color"))
+                                    jsonRetainedCommand["color"]["r"] = jsonMsg["color"]["r"];
+                                    jsonRetainedCommand["color"]["g"] = jsonMsg["color"]["g"];
+                                    jsonRetainedCommand["color"]["b"] = jsonMsg["color"]["b"];
+                                    jsonRetainedCommand["color"]["c"] = jsonMsg["color"]["c"];
+                                    jsonRetainedCommand["color"]["w"] = jsonMsg["color"]["w"];
                             // end-if rgbww_supported
                             // start-if hs_supported
-                                jsonRetainedCommand["color"]["h"] = hs.h;
-                                jsonRetainedCommand["color"]["s"] = hs.s;
+                                if(jsonMsg.containsKey("color"))
+                                    jsonRetainedCommand["color"]["h"] = jsonMsg["color"]["h"];
+                                    jsonRetainedCommand["color"]["s"] = jsonMsg["color"]["s"];
                             // end-if hs_supported
                             // start-if xy_supported
-                                jsonRetainedCommand["color"]["x"] = xy.x;
-                                jsonRetainedCommand["color"]["y"] = xy.y;
+                                if(jsonMsg.containsKey("color"))
+                                    jsonRetainedCommand["color"]["x"] = jsonMsg["color"]["x"];
+                                    jsonRetainedCommand["color"]["y"] = jsonMsg["color"]["y"];
                             // end-if xy_supported
                             // start-if effects_supported
-                                jsonRetainedCommand["effect"] = effectToString(effect);
+                                if(jsonMsg.containsKey("effect"))
+                                    jsonRetainedCommand["effect"] = effectToString(effect);
                             // end-if effects_supported
 
                                 jsonRetainedCommand["retain-recovery"] = true;
@@ -410,28 +578,334 @@ public:
                                 });
                             } });
 
+        bool needLooper = false;
         // start-if brightness_supported
-        device.setLooper([this](void)
-                         {
-            if(brightnessStep != 0 && millis()>=brightnessNextMillis){
-                // mult to compensate for potential loop-lag, causing multiple trigger skips
-                const float step = (float)brightnessStep*max(1.0f,floor((float)(millis()-brightnessNextMillis)/(float)brightnessDeltaMs));
-                if(abs((float)brightnessTarget - (float)brightness) <= abs(step)){
-                    brightness=brightnessTarget;
-                    brightnessStep=0;
-                }
-                else{
-                    brightness+=step;
-                    brightnessNextMillis = millis() + brightnessDeltaMs;
-                }
-                brightness_listener(brightness);
-                
-                if(brightness == 0){
-                    state = false;
-                    state_listener(state);
-                }
-            } });
+        needLooper = true;
         // end-if brightness_supported
+        // start-if color_temp_supported
+        needLooper = true;
+        // end-if color_temp_supported
+        // start-if rgb_supported
+        needLooper = true;
+        // end-if rgb_supported
+        // start-if rgbw_supported
+        needLooper = true;
+        // end-if rgbw_supported
+        // start-if rgbww_supported
+        needLooper = true;
+        // end-if rgbww_supported
+
+        if (needLooper)
+            device.setLooper([this](void)
+                             {
+                                 // start-if brightness_supported
+                                 if (brightnessStep != 0 && millis() >= brightnessNextMillis)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)brightnessStep * max(1.0f, floor((float)(millis() - brightnessNextMillis) / (float)brightnessDeltaMs));
+                                     if (abs((float)brightnessTarget - (float)brightness) <= step)
+                                     {
+                                         brightness = brightnessTarget;
+                                         brightnessStep = 0;
+                                     }
+                                     else
+                                     {
+                                         if (brightnessTarget < brightness)
+                                             brightness -= step;
+                                         else
+                                             brightness += step;
+                                         brightnessNextMillis = millis() + brightnessDeltaMs;
+                                     }
+                                     brightness_listener(brightness);
+
+                                     if (brightness == 0)
+                                     {
+                                         state = false;
+                                         state_listener(state);
+                                     }
+                                 }
+                                 // end-if brightness_supported
+
+                                 // start-if color_temp_supported
+                                 if (color_temp_step != 0 && millis() >= color_temp_next_millis)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)color_temp_step * max(1.0f, floor((float)(millis() - color_temp_next_millis) / (float)color_temp_delta_ms));
+                                     if (abs((float)color_temp_target - (float)color_temp) <= step)
+                                     {
+                                         color_temp = color_temp_target;
+                                         color_temp_step = 0;
+                                     }
+                                     else
+                                     {
+                                         if (color_temp_target < color_temp)
+                                             color_temp -= step;
+                                         else
+                                             color_temp += step;
+                                         color_temp_next_millis = millis() + color_temp_delta_ms;
+                                     }
+                                     color_temp_listener(color_temp);
+                                 }
+                                 // end-if color_temp_supported
+
+                                 // start-if rgb_supported
+                                 if (rgbStep.r != 0 && millis() >= rgbNextMillis.r)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbStep.r * max(1.0f, floor((float)(millis() - rgbNextMillis.r) / (float)rgbDeltaMs.r));
+                                     if (abs((float)rgbTarget.r - (float)rgb.r) <= step)
+                                     {
+                                         rgb.r = rgbTarget.r;
+                                         rgbStep.r = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbTarget.r < rgb.r)
+                                             rgb.r -= step;
+                                         else
+                                             rgb.r += step;
+                                         rgbNextMillis.r = millis() + rgbDeltaMs.r;
+                                     }
+                                     rgbTriggerListener = true;
+                                 }
+                                 if (rgbStep.g != 0 && millis() >= rgbNextMillis.g)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbStep.g * max(1.0f, floor((float)(millis() - rgbNextMillis.g) / (float)rgbDeltaMs.g));
+                                     if (abs((float)rgbTarget.g - (float)rgb.g) <= step)
+                                     {
+                                         rgb.g = rgbTarget.g;
+                                         rgbStep.g = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbTarget.g < rgb.g)
+                                             rgb.g -= step;
+                                         else
+                                             rgb.g += step;
+                                         rgbNextMillis.g = millis() + rgbDeltaMs.g;
+                                     }
+                                     rgbTriggerListener = true;
+                                 }
+                                 if (rgbStep.b != 0 && millis() >= rgbNextMillis.b)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbStep.b * max(1.0f, floor((float)(millis() - rgbNextMillis.b) / (float)rgbDeltaMs.b));
+                                     if (abs((float)rgbTarget.b - (float)rgb.b) <= step)
+                                     {
+                                         rgb.b = rgbTarget.b;
+                                         rgbStep.b = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbTarget.b < rgb.b)
+                                             rgb.b -= step;
+                                         else
+                                             rgb.b += step;
+                                         rgbNextMillis.b = millis() + rgbDeltaMs.b;
+                                     }
+                                     rgbTriggerListener = true;
+                                 }
+
+                                 if (rgbTriggerListener && millis() >= rgbNextTriggerMillis)
+                                 {
+                                     rgbTriggerListener = false;
+                                     rgbNextTriggerMillis += intervalDeltaMs;
+                                     rgb_listener(rgb);
+                                 }
+                                 // end-if rgb_supported
+
+                                 // start-if rgbw_supported
+                                 if (rgbwStep.r != 0 && millis() >= rgbwNextMillis.r)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbwStep.r * max(1.0f, floor((float)(millis() - rgbwNextMillis.r) / (float)rgbwDeltaMs.r));
+                                     if (abs((float)rgbwTarget.r - (float)rgbw.r) <= step)
+                                     {
+                                         rgbw.r = rgbwTarget.r;
+                                         rgbwStep.r = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbwTarget.r < rgbw.r)
+                                             rgbw.r -= step;
+                                         else
+                                             rgbw.r += step;
+                                         rgbwNextMillis.r = millis() + rgbwDeltaMs.r;
+                                     }
+                                     rgbwTriggerListener = true;
+                                 }
+                                 if (rgbwStep.g != 0 && millis() >= rgbwNextMillis.g)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbwStep.g * max(1.0f, floor((float)(millis() - rgbwNextMillis.g) / (float)rgbwDeltaMs.g));
+                                     if (abs((float)rgbwTarget.g - (float)rgbw.g) <= step)
+                                     {
+                                         rgbw.g = rgbwTarget.g;
+                                         rgbwStep.g = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbwTarget.g < rgbw.g)
+                                             rgbw.g -= step;
+                                         else
+                                             rgbw.g += step;
+                                         rgbwNextMillis.g = millis() + rgbwDeltaMs.g;
+                                     }
+                                     rgbwTriggerListener = true;
+                                 }
+                                 if (rgbwStep.b != 0 && millis() >= rgbwNextMillis.b)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbwStep.b * max(1.0f, floor((float)(millis() - rgbwNextMillis.b) / (float)rgbwDeltaMs.b));
+                                     if (abs((float)rgbwTarget.b - (float)rgbw.b) <= step)
+                                     {
+                                         rgbw.b = rgbwTarget.b;
+                                         rgbwStep.b = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbwTarget.b < rgbw.b)
+                                             rgbw.b -= step;
+                                         else
+                                             rgbw.b += step;
+                                         rgbwNextMillis.b = millis() + rgbwDeltaMs.b;
+                                     }
+                                     rgbwTriggerListener = true;
+                                 }
+                                 if (rgbwStep.w != 0 && millis() >= rgbwNextMillis.w)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbwStep.w * max(1.0f, floor((float)(millis() - rgbwNextMillis.w) / (float)rgbwDeltaMs.w));
+                                     if (abs((float)rgbwTarget.w - (float)rgbw.w) <= step)
+                                     {
+                                         rgbw.w = rgbwTarget.w;
+                                         rgbwStep.w = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbwTarget.w < rgbw.w)
+                                             rgbw.w -= step;
+                                         else
+                                             rgbw.w += step;
+                                         rgbwNextMillis.w = millis() + rgbwDeltaMs.w;
+                                     }
+                                     rgbwTriggerListener = true;
+                                 }
+
+                                 if (rgbwTriggerListener && millis() >= rgbwNextTriggerMillis)
+                                 {
+                                     rgbwTriggerListener = false;
+                                     rgbwNextTriggerMillis += intervalDeltaMs;
+                                     rgbw_listener(rgbw);
+                                 }
+                                 // end-if rgbw_supported
+
+                                 // start-if rgbww_supported
+                                 if (rgbwwStep.r != 0 && millis() >= rgbwwNextMillis.r)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbwwStep.r * max(1.0f, floor((float)(millis() - rgbwwNextMillis.r) / (float)rgbwwDeltaMs.r));
+                                     if (abs((float)rgbwwTarget.r - (float)rgbww.r) <= step)
+                                     {
+                                         rgbww.r = rgbwwTarget.r;
+                                         rgbwwStep.r = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbwwTarget.r < rgbww.r)
+                                             rgbww.r -= step;
+                                         else
+                                             rgbww.r += step;
+                                         rgbwwNextMillis.r = millis() + rgbwwDeltaMs.r;
+                                     }
+                                     rgbwwTriggerListener = true;
+                                 }
+                                 if (rgbwwStep.g != 0 && millis() >= rgbwwNextMillis.g)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbwwStep.g * max(1.0f, floor((float)(millis() - rgbwwNextMillis.g) / (float)rgbwwDeltaMs.g));
+                                     if (abs((float)rgbwwTarget.g - (float)rgbww.g) <= step)
+                                     {
+                                         rgbww.g = rgbwwTarget.g;
+                                         rgbwwStep.g = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbwwTarget.g < rgbww.g)
+                                             rgbww.g -= step;
+                                         else
+                                             rgbww.g += step;
+                                         rgbwwNextMillis.g = millis() + rgbwwDeltaMs.g;
+                                     }
+                                     rgbwwTriggerListener = true;
+                                 }
+                                 if (rgbwwStep.b != 0 && millis() >= rgbwwNextMillis.b)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbwwStep.b * max(1.0f, floor((float)(millis() - rgbwwNextMillis.b) / (float)rgbwwDeltaMs.b));
+                                     if (abs((float)rgbwwTarget.b - (float)rgbww.b) <= step)
+                                     {
+                                         rgbww.b = rgbwwTarget.b;
+                                         rgbwwStep.b = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbwwTarget.b < rgbww.b)
+                                             rgbww.b -= step;
+                                         else
+                                             rgbww.b += step;
+                                         rgbwwNextMillis.b = millis() + rgbwwDeltaMs.b;
+                                     }
+                                     rgbwwTriggerListener = true;
+                                 }
+                                 if (rgbwwStep.c != 0 && millis() >= rgbwwNextMillis.c)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbwwStep.c * max(1.0f, floor((float)(millis() - rgbwwNextMillis.c) / (float)rgbwwDeltaMs.c));
+                                     if (abs((float)rgbwwTarget.c - (float)rgbww.c) <= step)
+                                     {
+                                         rgbww.c = rgbwwTarget.c;
+                                         rgbwwStep.c = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbwwTarget.c < rgbww.c)
+                                             rgbww.c -= step;
+                                         else
+                                             rgbww.c += step;
+                                         rgbwwNextMillis.c = millis() + rgbwwDeltaMs.c;
+                                     }
+                                     rgbwwTriggerListener = true;
+                                 }
+                                 if (rgbwwStep.w != 0 && millis() >= rgbwwNextMillis.w)
+                                 {
+                                     // mult to compensate for potential loop-lag, causing multiple trigger skips
+                                     const float step = (float)rgbwwStep.w * max(1.0f, floor((float)(millis() - rgbwwNextMillis.w) / (float)rgbwwDeltaMs.w));
+                                     if (abs((float)rgbwwTarget.w - (float)rgbww.w) <= step)
+                                     {
+                                         rgbww.w = rgbwwTarget.w;
+                                         rgbwwStep.w = 0;
+                                     }
+                                     else
+                                     {
+                                         if (rgbwwTarget.w < rgbww.w)
+                                             rgbww.w -= step;
+                                         else
+                                             rgbww.w += step;
+                                         rgbwwNextMillis.w = millis() + rgbwwDeltaMs.w;
+                                     }
+                                     rgbwwTriggerListener = true;
+                                 }
+
+                                 if (rgbwwTriggerListener && millis() >= rgbwwNextTriggerMillis)
+                                 {
+                                     rgbwwTriggerListener = false;
+                                     rgbwwNextTriggerMillis += intervalDeltaMs;
+                                     rgbww_listener(rgbww);
+                                 }
+                                 // end-if rgbww_supported
+                             });
     }
 
     bool getState()
