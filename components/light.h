@@ -526,6 +526,10 @@ public:
                                 effect = stringToEffect(jsonMsg["effect"]);
                                 jsonState["effect"] = jsonMsg["effect"];
                             }
+                            else if(jsonMsg.containsKey("color") && effect != 0){
+                                effect = (Effect)0; // assumed to be 'none'
+                                jsonState["effect"] = effectToString(effect);
+                            }
                             // end-if effects_supported
                             
                             // --------------------------------------------------
