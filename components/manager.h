@@ -368,7 +368,7 @@ public:
             delay(100);
         }
 #else
-        // waitForSync();
+        waitForSync();
         time.setLocation("Europe/Vienna");
 #endif
 
