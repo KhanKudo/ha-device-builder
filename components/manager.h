@@ -1,8 +1,12 @@
 // start
 #include <Arduino.h>
+#ifdef OTA_UPDATE
 #include <ArduinoOTA.h>
+#endif
 #include <PubSubClient.h>
+#ifdef OTA_UPDATE
 #include <WebSocketsClient.h>
+#endif
 
 #ifdef ESP32
 const char root_ca[] PROGMEM = R"EOF(
@@ -87,7 +91,9 @@ private:
     WiFiClient wifiClient;
     WiFiClientSecure wifiClientSecure;
     PubSubClient client = PubSubClient(wifiClient);
+#ifdef OTA_UPDATE
     WebSocketsClient webSocket;
+#endif
 
     String availabilityTopic = "AVAILABILITY_TOPIC";
 
@@ -95,6 +101,7 @@ private:
     uint32_t intervalLoopLimiter = 0;
     uint32_t lastMillis = 0;
 
+#ifdef OTA_UPDATE
     const struct
     {
         String RESTART_DEVICE = "RESTART_DEVICE";
@@ -109,6 +116,7 @@ private:
         String OK = "OK";
         String ERROR = "ERROR";
     } WebSocketType;
+#endif
 
     std::function<void(char *, byte *, unsigned int)> callback = [this](char *char_topic, byte *payload, unsigned int length)
     {
@@ -141,6 +149,7 @@ private:
         }
     }
 
+#ifdef OTA_UPDATE
     bool attemptingUpdate = false;
     bool isUpdating = false;
     bool waitingForUpdateSize = false;
@@ -275,6 +284,7 @@ private:
             break;
         }
     };
+#endif
 
     void connected()
     {
@@ -291,6 +301,7 @@ private:
         }
     }
 
+#ifdef OTA_UPDATE
     void updateFirmware()
     {
         Serial.println("Updating firmware...");
@@ -310,6 +321,7 @@ private:
         // webSocket.setReconnectInterval(5000);
         // webSocket.enableHeartbeat(15000, 3000, 2);
     }
+#endif
 
     const char *_ssid;
     const char *_password;
@@ -360,8 +372,10 @@ public:
         time.setLocation("Europe/Vienna");
 #endif
 
+#ifdef OTA_UPDATE
         ArduinoOTA.setHostname(codeName.c_str());
         ArduinoOTA.begin();
+#endif
 
         client.setServer(broker, port);
         client.setCallback(callback);
@@ -387,6 +401,7 @@ public:
             }
             /**/ });
 
+#ifdef OTA_UPDATE
         subscribe("device-version-manager/update-available-for", [this](String deviceId)
                   {
             if (!deviceId.equals(id))
@@ -394,14 +409,17 @@ public:
 
             updateFirmware();
             /**/ });
+#endif
 
         reconnect();
 
         // __insert-discovery-publish
 
+#ifdef OTA_UPDATE
         String hash = String("HA_DEVICE_PLACEHOLDER_HASH");
 
         publish(("device-version-manager/register/" + id).c_str(), (hash + " " + availabilityTopic).c_str(), true);
+#endif
     }
 
     void loop()
@@ -426,7 +444,11 @@ public:
         if (!WiFi.isConnected())
             return;
 
-        if (!attemptingUpdate && !client.connected())
+        if (
+#ifdef OTA_UPDATE
+            !attemptingUpdate &&
+#endif
+            !client.connected())
         {
             if (restartTimeout == 0)
             {
@@ -443,12 +465,16 @@ public:
             }
         }
 
+#ifdef OTA_UPDATE
         if (attemptingUpdate)
             webSocket.loop();
         else
             client.loop();
-
+            
         ArduinoOTA.handle();
+#else
+        client.loop();
+#endif
 
 #ifdef TIME
         events();

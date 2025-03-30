@@ -19,6 +19,7 @@ const yaml = require('js-yaml')
  *  availability?: boolean
  *  retain?: boolean
  *  time?: boolean
+ *  ota_update?: boolean
  *  identifiers: string | string[]
  *  features?: {
  *      class: "binary_sensor" |
@@ -154,8 +155,11 @@ const haMqttJsonFeatures = []
 
 let outputHeader = ''
 
-if (device.time === true) {
+if (device.time === true) { // default: false
     outputHeader += '#define TIME\n'
+}
+if (device.ota_update !== false) { // default: true
+    outputHeader += '#define OTA_UPDATE\n'
 }
 
 const startIdentifier = '// start\r\n'

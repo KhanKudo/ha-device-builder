@@ -46,6 +46,10 @@
             "description": "Whether or not to keep track of time using the ezTime library exposing a time property as well as some functions, uses more resources and network bandwidth/data, Default: false",
             "type": "boolean"
         },
+        "ota_update": {
+            "description": "Whether or not to enable over-the-air firmware updates, halves available FLASH and uses more memory, Default: true",
+            "type": "boolean"
+        },
         "retain": {
             "description": "Whether or not mqtt messages are sent using the retain flag. Default: true",
             "type": "boolean"
