@@ -1137,17 +1137,17 @@ public:
     }
 
     // does account for brightness
-    uint8_t getCold()
+    UINT_RESOLUTION_T getCold()
     {
-        int ratio = map(color_temp, 153, 500, 0, 511);
-        return (float)min(255, 511 - ratio) * (float)brightness / 255.0;
+        float ratio = (float)(color_temp-MIN_MIREDS) / (float)(MAX_MIREDS-MIN_MIREDS);
+        return (1.0f-ratio) * (float)brightness;
     }
 
     // does account for brightness
-    uint8_t getWarm()
+    UINT_RESOLUTION_T getWarm()
     {
-        int ratio = map(color_temp, 153, 500, 0, 511);
-        return (float)min(255, ratio) * (float)brightness / 255.0;
+        float ratio = (float)(color_temp-MIN_MIREDS) / (float)(MAX_MIREDS-MIN_MIREDS);
+        return ratio * (float)brightness;
     }
 
     void setColorTemp(uint16_t newColorTemp)
