@@ -43,8 +43,9 @@ const yaml = require('js-yaml')
  *      unit_of_measurement?: string
  *      effect_list?: string | string[]
  *      brightness?: boolean
- *      max_mireds?: number
- *      min_mireds?: number
+ *      max_kelvin?: number
+ *      min_kelvin?: number
+ *      color_temp_kelvin?: boolean
  *      flash_time_long?: number
  *      flash_time_short?: number
  *      resolution?: number
@@ -125,8 +126,9 @@ const discoveryPrefix = 'homeassistant'
  *      state_topic?: string
  *      command_topic?: string
  *      topic?: string
- *      max_mireds?: number
- *      min_mireds?: number
+ *      max_kelvin?: number
+ *      min_kelvin?: number
+ *      color_temp_kelvin?: boolean
  *      flash_time_long?: number
  *      flash_time_short?: number
  *      min?: number
@@ -135,7 +137,7 @@ const discoveryPrefix = 'homeassistant'
  *      brightness?: boolean
  *      brightness_scale?: number
  *      mode?: boolean
- *      supported_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
+ *      supported_color_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
  *      options?: string[]
  *      schema?: 'json'
  *      automation_type?: 'trigger'
@@ -207,8 +209,9 @@ outputHeader += '\n\n'
  *      force_update?: boolean
  *      unit_of_measurement?: string
  *      effect_list?: string | string[]
- *      max_mireds?: number
- *      min_mireds?: number
+ *      max_kelvin?: number
+ *      min_kelvin?: number
+ *      color_temp_kelvin?: boolean
  *      flash_time_long?: number
  *      flash_time_short?: number
  *      resolution?: number
@@ -248,9 +251,10 @@ outputHeader += '\n\n'
  *      brightness?: boolean
  *      brightness_scale?: number
  *      mode?: boolean
- *      supported_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
- *      max_mireds?: number
- *      min_mireds?: number
+ *      supported_color_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
+ *      max_kelvin?: number
+ *      min_kelvin?: number
+ *      color_temp_kelvin?: boolean
  *      options?: string[]
  *      schema?: 'json'
  *      automation_type?: 'trigger'
@@ -365,10 +369,10 @@ function processFeature(feature, jsonFeature) {
         .replace(/COMMAND_TOPIC/g, jsonFeature.command_topic?.replace('~', jsonFeature['~']) ?? '')
         // replace STATE_TOPIC
         .replace(/STATE_TOPIC/g, jsonFeature.state_topic?.replace('~', jsonFeature['~']) ?? '')
-        // replace MIN_MIREDS
-        .replace(/MIN_MIREDS/g, jsonFeature.min_mireds)
-        // replace MAX_MIREDS
-        .replace(/MAX_MIREDS/g, jsonFeature.max_mireds)
+        // replace MIN_KELVIN
+        .replace(/MIN_KELVIN/g, jsonFeature.min_kelvin)
+        // replace MAX_KELVIN
+        .replace(/MAX_KELVIN/g, jsonFeature.max_kelvin)
         // replace RESOLUTION
         .replace(/RESOLUTION/g, feature.resolution ?? 8)
         // replace VAR_NAME
@@ -435,11 +439,11 @@ device.features.forEach((feature, index) => {
             haMqtt.state_topic = `~/state`
             haMqtt.schema = 'json'
             haMqtt.brightness = feature.mode !== undefined && feature.mode !== 'onoff'
-            haMqtt.color_mode = true
             haMqtt.supported_color_modes = [feature.mode ?? 'onoff']
-            haMqtt.max_mireds = feature.max_mireds ?? 500
-            haMqtt.min_mireds = feature.min_mireds ?? 153
-            haMqtt.brightness_scale = 2 ** (feature.resolution ?? 8 ?? 8) - 1
+            haMqtt.max_kelvin = feature.max_kelvin ?? 6500
+            haMqtt.min_kelvin = feature.min_kelvin ?? 2700
+            haMqtt.color_temp_kelvin = true
+            haMqtt.brightness_scale = 2 ** (feature.resolution ?? 8) - 1
             haMqtt.effect_list = feature.effect_list
             haMqtt.effect = feature.effect_list !== undefined && feature.effect_list.length > 0
             break

@@ -3,9 +3,9 @@
 
 #define RETAIN false
 #define NUMBER_OF_EFFECTS 0
-#define MIN_MIREDS 0
-#define MAX_MIREDS 0
-#define RESOLUTION 0
+#define MIN_KELVIN 2700
+#define MAX_KELVIN 6500
+#define RESOLUTION 8
 #define UINT_RESOLUTION_T uint8_t
 
 // start
@@ -246,8 +246,8 @@ private:
 
 public:
     // start-if color_temp_supported
-    const unsigned int min_mireds = MIN_MIREDS;
-    const unsigned int max_mireds = MAX_MIREDS;
+    const unsigned int min_kelvin = MIN_KELVIN;
+    const unsigned int max_kelvin = MAX_KELVIN;
     // end-if color_temp_supported
 
     // start-if brightness_supported
@@ -1139,15 +1139,15 @@ public:
     // does account for brightness
     UINT_RESOLUTION_T getCold()
     {
-        float ratio = (float)(color_temp-MIN_MIREDS) / (float)(MAX_MIREDS-MIN_MIREDS);
-        return (1.0f-ratio) * (float)brightness;
+        float ratio = (float)(color_temp-MIN_KELVIN) / (float)(MAX_KELVIN-MIN_KELVIN);
+        return ratio * (float)brightness;
     }
 
     // does account for brightness
     UINT_RESOLUTION_T getWarm()
     {
-        float ratio = (float)(color_temp-MIN_MIREDS) / (float)(MAX_MIREDS-MIN_MIREDS);
-        return ratio * (float)brightness;
+        float ratio = (float)(color_temp-MIN_KELVIN) / (float)(MAX_KELVIN-MIN_KELVIN);
+        return (1.0f-ratio) * (float)brightness;
     }
 
     void setColorTemp(uint16_t newColorTemp)
