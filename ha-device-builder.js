@@ -10,7 +10,7 @@ if (typeof haDeviceFilePath !== 'string' || !haDeviceFilePath.endsWith('.ha-devi
 const yaml = require('js-yaml')
 
 /**
- * @type {{
+ * @typedef {{
  *  name: string
  *  manufacturer?: string
  *  model?: string
@@ -21,7 +21,11 @@ const yaml = require('js-yaml')
  *  time?: boolean
  *  ota_update?: boolean
  *  identifiers: string | string[]
- *  features?: {
+ *  features?: YamlFeature[]
+ * }} YamlConfig
+
+/**
+ * @typedef {{
  *      class: "binary_sensor" |
  *             "button" |
  *             "device_trigger" |
@@ -45,7 +49,6 @@ const yaml = require('js-yaml')
  *      brightness?: boolean
  *      max_kelvin?: number
  *      min_kelvin?: number
- *      color_temp_kelvin?: boolean
  *      flash_time_long?: number
  *      flash_time_short?: number
  *      resolution?: number
@@ -55,16 +58,55 @@ const yaml = require('js-yaml')
  *      options?: string[]
  *      type?: 'button_short_press' | 'button_short_release' | 'button_long_press' | 'button_long_release' | 'button_double_press' | 'button_triple_press' | 'button_quadruple_press' | 'button_quintuple_press' | string
  *      subtype?: 'turn_on' | 'turn_off' | 'button_1' | 'button_2' | 'button_3' | 'button_4' | 'button_5' | 'button_6' | string
- *      mode?: "onoff" |
- *                   "brightness" |
- *                   "color_temp" |
- *                   "hs" |
- *                   "xy" |
- *                   "rgb" |
- *                   "rgbw" |
- *                   "rgbww"
- * }[]
- * }}
+ *      mode?: "onoff" | "brightness" | "color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww"
+ * }} YamlFeature
+ */
+
+/**
+ * @typedef {{
+ *      name: string
+ *      unique_id: string
+ *      retain: boolean
+ *      icon?: string
+ *      expire_after?: number
+ *      off_delay?: number
+ *      force_update?: boolean
+ *      unit_of_measurement?: string
+ *      effect_list?: string | string[]
+ *      availability_topic?: string
+ *      state_topic?: string
+ *      command_topic?: string
+ *      topic?: string
+ *      max_kelvin?: number
+ *      min_kelvin?: number
+ *      color_temp_kelvin?: boolean
+ *      flash_time_long?: number
+ *      flash_time_short?: number
+ *      min?: number
+ *      max?: number
+ *      step?: number
+ *      brightness?: boolean
+ *      brightness_scale?: number
+ *      mode?: boolean
+ *      supported_color_modes?: ("onoff" | "brightness" | "color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
+ *      options?: string[]
+ *      schema?: 'json'
+ *      automation_type?: 'trigger'
+ *      type?: 'button_short_press' | 'button_short_release' | 'button_long_press' | 'button_long_release' | 'button_double_press' | 'button_triple_press' | 'button_quadruple_press' | 'button_quintuple_press' | string
+ *      subtype?: 'turn_on' | 'turn_off' | 'button_1' | 'button_2' | 'button_3' | 'button_4' | 'button_5' | 'button_6' | string
+ *      device: {
+ *          name: string
+ *          model?: string
+ *          manufacturer?: string
+ *          suggested_area?: string
+ *          sw_version?: string
+ *          identifiers: string | string[]
+ *      }
+ * }} JsonFeature
+ */
+
+/**
+ * @type {YamlConfig}
 //  *  "-WIP-alarm_control_panel" |
 //  *  "binary_sensor" |
 //  *  "button" |
@@ -111,47 +153,9 @@ for (const fileName of fs.readdirSync(`${__dirname}/components/`)) {
 }
 
 const discoveryPrefix = 'homeassistant'
+
 /**
- * @type {{
- *      name: string
- *      unique_id: string
- *      retain: boolean
- *      icon?: string
- *      expire_after?: number
- *      off_delay?: number
- *      force_update?: boolean
- *      unit_of_measurement?: string
- *      effect_list?: string | string[]
- *      availability_topic?: string
- *      state_topic?: string
- *      command_topic?: string
- *      topic?: string
- *      max_kelvin?: number
- *      min_kelvin?: number
- *      color_temp_kelvin?: boolean
- *      flash_time_long?: number
- *      flash_time_short?: number
- *      min?: number
- *      max?: number
- *      step?: number
- *      brightness?: boolean
- *      brightness_scale?: number
- *      mode?: boolean
- *      supported_color_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
- *      options?: string[]
- *      schema?: 'json'
- *      automation_type?: 'trigger'
- *      type?: 'button_short_press' | 'button_short_release' | 'button_long_press' | 'button_long_release' | 'button_double_press' | 'button_triple_press' | 'button_quadruple_press' | 'button_quintuple_press' | string
- *      subtype?: 'turn_on' | 'turn_off' | 'button_1' | 'button_2' | 'button_3' | 'button_4' | 'button_5' | 'button_6' | string
- *      device: {
- *          name: string
- *          model?: string
- *          manufacturer?: string
- *          suggested_area?: string
- *          sw_version?: string
- *          identifiers?: string | string[]
- *      }
- * }[]}
+ * @type {JsonFeature[]}
  */
 const haMqttJsonFeatures = []
 
@@ -188,87 +192,8 @@ outputHeader += '\n\n'
 
 /**
  *
- * @param {{
- *      class: "binary_sensor" |
- *             "button" |
- *             "device_trigger" |
- *             "light" |
- *             "lock" |
- *             "number" |
- *             "scene" |
- *             "select" |
- *             "sensor" |
- *             "switch"
- *      name: string
- *      unique_id: string
- *      retain: boolean
- *      var_name?: string
- *      icon?: string
- *      expire_after?: number
- *      off_delay?: number
- *      force_update?: boolean
- *      unit_of_measurement?: string
- *      effect_list?: string | string[]
- *      max_kelvin?: number
- *      min_kelvin?: number
- *      color_temp_kelvin?: boolean
- *      flash_time_long?: number
- *      flash_time_short?: number
- *      resolution?: number
- *      min?: number
- *      max?: number
- *      step?: number
- *      options?: string[]
- *      type?: 'button_short_press' | 'button_short_release' | 'button_long_press' | 'button_long_release' | 'button_double_press' | 'button_triple_press' | 'button_quadruple_press' | 'button_quintuple_press' | string
- *      subtype?: 'turn_on' | 'turn_off' | 'button_1' | 'button_2' | 'button_3' | 'button_4' | 'button_5' | 'button_6' | string
- *      mode?: "onoff" |
- *                   "brightness" |
- *                   "color_temp" |
- *                   "hs" |
- *                   "xy" |
- *                   "rgb" |
- *                   "rgbw" |
- *                   "rgbww"
- * }} feature
- * @param {{
- *      name: string
- *      unique_id: string
- *      icon?: string
- *      expire_after?: number
- *      off_delay?: number
- *      force_update?: boolean
- *      unit_of_measurement?: string
- *      effect_list?: string | string[]
- *      availability_topic?: string
- *      state_topic?: string
- *      command_topic?: string
- *      topic?: string
- *      flash_time_long?: number
- *      flash_time_short?: number
- *      min?: number
- *      max?: number
- *      step?: number
- *      brightness?: boolean
- *      brightness_scale?: number
- *      mode?: boolean
- *      supported_color_modes?: ("color_temp" | "hs" | "xy" | "rgb" | "rgbw" | "rgbww")[]
- *      max_kelvin?: number
- *      min_kelvin?: number
- *      color_temp_kelvin?: boolean
- *      options?: string[]
- *      schema?: 'json'
- *      automation_type?: 'trigger'
- *      type?: 'button_short_press' | 'button_short_release' | 'button_long_press' | 'button_long_release' | 'button_double_press' | 'button_triple_press' | 'button_quadruple_press' | 'button_quintuple_press' | string
- *      subtype?: 'turn_on' | 'turn_off' | 'button_1' | 'button_2' | 'button_3' | 'button_4' | 'button_5' | 'button_6' | string
- *      device: {
- *          name: string
- *          model?: string
- *          manufacturer?: string
- *          suggested_area?: string
- *          sw_version?: string
- *          identifiers: string | string[]
- *      }
- * }} jsonFeature
+ * @param {YamlFeature} feature
+ * @param {JsonFeature} jsonFeature
  *
  * @returns {string | null}
  */

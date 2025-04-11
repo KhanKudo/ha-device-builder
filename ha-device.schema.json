@@ -182,12 +182,12 @@
                                 "description": "Time in Seconds, Default: 2",
                                 "type": "integer"
                             },
-                            "max_mireds": {
-                                "description": "Max color temperature in mireds, Default: 500",
+                            "max_kelvin": {
+                                "description": "Max color temperature in Kelvin, Default: 6500",
                                 "type": "number"
                             },
-                            "min_mireds": {
-                                "description": "Min color temperature in mireds, Default: 153",
+                            "min_kelvin": {
+                                "description": "Min color temperature in Kelvin, Default: 2700",
                                 "type": "number"
                             },
                             "resolution": {
