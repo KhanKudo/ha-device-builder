@@ -149,6 +149,8 @@ function toCodeName(name) {
 //TODO a general native_handling-toggle should also exist, such as light1.disableNativeHandler(), with an enable of course too
 //TODO the compiler should also know that, if no yaml options for native handling are present, then those functions should be either
 
+const startIdentifier = '// start\r\n'
+
 /**
  * @type {[key: string]: string}
  */
@@ -174,8 +176,6 @@ if (device.time === true) { // default: false
 if (device.ota_update !== false) { // default: true
     outputHeader += '#define OTA_UPDATE\n'
 }
-
-const startIdentifier = '// start\r\n'
 
 /**
  * @type {string | null}
@@ -300,7 +300,7 @@ function processFeature(feature, jsonFeature) {
         }
 
         // TODO: for smart RGB/RGBW/RGBWW
-        defs.OUTPUT_DATA = ''
+        // defs.OUTPUT_DATA = ''
 
 
         if (Object.keys(defs).length) {
@@ -454,6 +454,41 @@ outputHeader = outputHeader.replace('// __insert-discovery-publish\r\n', haMqttJ
 // write the output file
 fs.writeFileSync('include/ha-device.h', outputHeader)
 
+// include ha-device and init it in main.cpp, if not already done
+if (fs.existsSync('src/main.cpp')) {
+    let mainFile = fs.readFileSync('src/main.cpp').toString()
+    let changed = false
+
+    if (!mainFile.includes('#include "ha-device.h"')) {
+        let newline = '\n'
+        if (!mainFile.includes('#include '))
+            newline += '\n'
+        mainFile = '#include "ha-device.h"' + newline + mainFile
+        changed = true
+    }
+
+    if (mainFile.includes('#include <Arduino.h>\n')) {
+        mainFile = mainFile.replace('#include <Arduino.h>\n', '')
+        changed = true
+    }
+
+    if (!mainFile.includes('device.init();')) {
+        const startSetup = mainFile.indexOf('\n{', mainFile.indexOf('void setup()'))
+        const endSetup = mainFile.indexOf('\n}', startSetup)
+        mainFile = mainFile.slice(0, endSetup) + '\n    device.init();' + mainFile.slice(endSetup)
+        changed = true
+    }
+
+    if (!mainFile.includes('device.loop();')) {
+        const startLoop = mainFile.indexOf('\n{', mainFile.indexOf('void loop()')) + 2
+        mainFile = mainFile.slice(0, startLoop) + '\n    device.loop();' + mainFile.slice(startLoop)
+        changed = true
+    }
+
+    if (changed)
+        fs.writeFileSync('src/main.cpp', mainFile)
+}
+
 const libDeps = [
     'knolleary/PubSubClient@^2.8',
     'links2004/WebSockets@^2.4.1',
@@ -527,7 +562,7 @@ if (fs.existsSync('platformio.ini')) {
         if (!iniFile.includes('upload_port = ')) {
             if (!iniFile.endsWith('\n'))
                 iniFile += '\n'
-            iniFile += `upload_port = ${host}\n`
+            iniFile += `upload_port = ${host}\nupload_flags = --host_port=9938\n`
 
             isModified = true
         }
