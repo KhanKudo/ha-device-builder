@@ -8,6 +8,17 @@
 #define RESOLUTION 8
 #define UINT_RESOLUTION_T uint8_t
 
+#define OUTPUT_HANDLE
+// #define OUTPUT_DATA //TODO later, when FastLED auto-handling gets implemented
+#define OUTPUT_MODE_ONOFF
+
+#define OUTPUT_PIN GPIO_NUM_8
+#define OUTPUT_PIN_R GPIO_NUM_6
+#define OUTPUT_PIN_G GPIO_NUM_7
+#define OUTPUT_PIN_B GPIO_NUM_8
+#define OUTPUT_PIN_W GPIO_NUM_9
+#define OUTPUT_PIN_C GPIO_NUM_10
+
 // start
 
 #include <ArduinoJson.h>
@@ -150,8 +161,14 @@ private:
 
     bool initialSetup = true;
 
+#ifdef OUTPUT_MODE_ONOFF
+    std::function<void(bool)> state_listener = [](bool state)
+    {
+        digitalWrite(OUTPUT_PIN, state);
+    };
+#elif !defined(OUTPUT_HANDLE)
     std::function<void(bool)> state_listener = [](bool) {};
-
+#endif
     bool state = false;
 
     // start-if brightness_supported
@@ -160,7 +177,19 @@ private:
     uint16_t brightnessDeltaMs = 0;
     uint32_t brightnessNextMillis = 0;
     UINT_RESOLUTION_T brightness = 0;
+#ifdef OUTPUT_HANDLE
+    std::function<void(UINT_RESOLUTION_T)> brightness_listener = [this](UINT_RESOLUTION_T brightness)
+    {
+#ifdef OUTPUT_PIN
+        ledcWrite(OUTPUT_PIN, brightness);
+#elif defined(OUTPUT_PIN_W) && !defined(OUTPUT_PIN_R)
+        ledcWrite(OUTPUT_PIN_W, getWarm());
+        ledcWrite(OUTPUT_PIN_C, getCold());
+#endif
+    };
+#else
     std::function<void(UINT_RESOLUTION_T)> brightness_listener = [](UINT_RESOLUTION_T) {};
+#endif
     // end-if brightness_supported
 
     // start-if color_temp_supported
@@ -169,7 +198,14 @@ private:
     uint16_t color_temp_delta_ms = 0;
     uint32_t color_temp_next_millis = 0;
     uint16_t color_temp = 0;
+#ifdef OUTPUT_HANDLE
+    std::function<void(uint16_t)> color_temp_listener = [this](uint16_t color_temp)
+    {
+        brightness_listener(0);
+    };
+#else
     std::function<void(uint16_t)> color_temp_listener = [](uint16_t) {};
+#endif
     // end-if color_temp_supported
 
     // start-if rgb_supported
@@ -180,7 +216,17 @@ private:
     bool rgbTriggerListener = false;
     uint32_t rgbNextTriggerMillis = 0;
     Color_RGB rgb = {0, 0, 0};
+#ifdef OUTPUT_HANDLE
+    std::function<void(Color_RGB)> rgb_listener = [](Color_RGB rgb)
+    {
+        // TODO handle brightness somehow
+        ledcWrite(OUTPUT_PIN_R, rgb.r);
+        ledcWrite(OUTPUT_PIN_G, rgb.g);
+        ledcWrite(OUTPUT_PIN_B, rgb.b);
+    };
+#else
     std::function<void(Color_RGB)> rgb_listener = [](Color_RGB) {};
+#endif
     // end-if rgb_supported
 
     // start-if rgbw_supported
@@ -191,7 +237,18 @@ private:
     bool rgbwTriggerListener = false;
     uint32_t rgbwNextTriggerMillis = 0;
     Color_RGBW rgbw = {0, 0, 0, 0};
+#ifdef OUTPUT_HANDLE
+    std::function<void(Color_RGBW)> rgbw_listener = [](Color_RGBW rgbw)
+    {
+        // TODO handle brightness somehow
+        ledcWrite(OUTPUT_PIN_R, rgbw.r);
+        ledcWrite(OUTPUT_PIN_G, rgbw.g);
+        ledcWrite(OUTPUT_PIN_B, rgbw.b);
+        ledcWrite(OUTPUT_PIN_W, rgbw.w);
+    };
+#else
     std::function<void(Color_RGBW)> rgbw_listener = [](Color_RGBW) {};
+#endif
     // end-if rgbw_supported
 
     // start-if rgbww_supported
@@ -202,7 +259,19 @@ private:
     bool rgbwwTriggerListener = false;
     uint32_t rgbwwNextTriggerMillis = 0;
     Color_RGBWW rgbww = {0, 0, 0, 0, 0};
+#ifdef OUTPUT_HANDLE
+    std::function<void(Color_RGBWW)> rgbww_listener = [](Color_RGBWW rgbww)
+    {
+        // TODO handle brightness somehow
+        ledcWrite(OUTPUT_PIN_R, rgbww.r);
+        ledcWrite(OUTPUT_PIN_G, rgbww.g);
+        ledcWrite(OUTPUT_PIN_B, rgbww.b);
+        ledcWrite(OUTPUT_PIN_W, rgbww.w);
+        ledcWrite(OUTPUT_PIN_C, rgbww.c);
+    };
+#else
     std::function<void(Color_RGBWW)> rgbww_listener = [](Color_RGBWW) {};
+#endif
     // end-if rgbww_supported
 
     // start-if hs_supported
@@ -261,6 +330,36 @@ public:
             device.clearRetain(commandTopic.c_str());
             device.clearRetain(stateTopic.c_str());
         }
+
+#ifdef OUTPUT_MODE_ONOFF
+        pinMode(OUTPUT_PIN, OUTPUT);
+        digitalWrite(OUTPUT_PIN, 0);
+#else
+#ifdef OUTPUT_PIN
+        ledcAttach(OUTPUT_PIN, 16384, RESOLUTION);
+        ledcWrite(OUTPUT_PIN, 0);
+#endif
+#ifdef OUTPUT_PIN_R
+        ledcAttach(OUTPUT_PIN_R, 16384, RESOLUTION);
+        ledcWrite(OUTPUT_PIN_R, 0);
+#endif
+#ifdef OUTPUT_PIN_G
+        ledcAttach(OUTPUT_PIN_G, 16384, RESOLUTION);
+        ledcWrite(OUTPUT_PIN_G, 0);
+#endif
+#ifdef OUTPUT_PIN_B
+        ledcAttach(OUTPUT_PIN_B, 16384, RESOLUTION);
+        ledcWrite(OUTPUT_PIN_B, 0);
+#endif
+#ifdef OUTPUT_PIN_W
+        ledcAttach(OUTPUT_PIN_W, 16384, RESOLUTION);
+        ledcWrite(OUTPUT_PIN_W, 0);
+#endif
+#ifdef OUTPUT_PIN_C
+        ledcAttach(OUTPUT_PIN_C, 16384, RESOLUTION);
+        ledcWrite(OUTPUT_PIN_C, 0);
+#endif
+#endif
 
         device.subscribe(commandTopic.c_str(), [this](String message)
                          {
@@ -580,11 +679,13 @@ public:
                             if(jsonState.containsKey("brightness") && !jsonMsg.containsKey("transition")){
                                 brightness_listener(brightness);
                             }
-                            // end-if brightness_supported
+            // end-if brightness_supported
 
+#if defined(OUTPUT_MODE_ONOFF) || !defined(OUTPUT_HANDLE)
                             if(jsonState.containsKey("state")){
                                 state_listener(state);
                             }
+#endif
 
                             char responseMsg[256];
                             serializeJson(jsonState, responseMsg, 256);
@@ -697,7 +798,9 @@ public:
                                      if (brightness == 0)
                                      {
                                          state = false;
+#if defined(OUTPUT_MODE_ONOFF) || !defined(OUTPUT_HANDLE)
                                          state_listener(state);
+#endif
                                      }
                                  }
                                  // end-if brightness_supported
@@ -1096,11 +1199,13 @@ public:
         device.publish(commandTopic.c_str(), message, retain);
     }
 
+#ifndef OUTPUT_HANDLE
     // only one listener will work, newest overwrites previous
     void onState(std::function<void(bool)> _listener)
     {
         state_listener = _listener;
     }
+#endif
 
     // start-if brightness_supported
     UINT_RESOLUTION_T getBrightness()
@@ -1123,11 +1228,13 @@ public:
         device.publish(commandTopic.c_str(), message, retain);
     }
 
+#ifndef OUTPUT_HANDLE
     // only one listener will work, newest overwrites previous
     void onBrightness(std::function<void(UINT_RESOLUTION_T)> _listener)
     {
         brightness_listener = _listener;
     }
+#endif
     // end-if brightness_supported
 
     // start-if color_temp_supported
@@ -1139,15 +1246,15 @@ public:
     // does account for brightness
     UINT_RESOLUTION_T getCold()
     {
-        float ratio = (float)(color_temp-MIN_KELVIN) / (float)(MAX_KELVIN-MIN_KELVIN);
+        float ratio = (float)(color_temp - MIN_KELVIN) / (float)(MAX_KELVIN - MIN_KELVIN);
         return ratio * (float)brightness;
     }
 
     // does account for brightness
     UINT_RESOLUTION_T getWarm()
     {
-        float ratio = (float)(color_temp-MIN_KELVIN) / (float)(MAX_KELVIN-MIN_KELVIN);
-        return (1.0f-ratio) * (float)brightness;
+        float ratio = (float)(color_temp - MIN_KELVIN) / (float)(MAX_KELVIN - MIN_KELVIN);
+        return (1.0f - ratio) * (float)brightness;
     }
 
     void setColorTemp(uint16_t newColorTemp)
@@ -1165,11 +1272,13 @@ public:
         device.publish(commandTopic.c_str(), message, retain);
     }
 
+#ifndef OUTPUT_HANDLE
     // only one listener will work, newest overwrites previous
     void onColorTemp(std::function<void(uint16_t)> _listener)
     {
         color_temp_listener = _listener;
     }
+#endif
     // end-if color_temp_supported
 
     // start-if rgb_supported
@@ -1203,11 +1312,13 @@ public:
         device.publish(commandTopic.c_str(), message, retain);
     }
 
+#ifndef OUTPUT_HANDLE
     // only one listener will work, newest overwrites previous
     void onRGB(std::function<void(Color_RGB)> _listener)
     {
         rgb_listener = _listener;
     }
+#endif
     // end-if rgb_supported
 
     // start-if rgbw_supported
@@ -1242,11 +1353,13 @@ public:
         device.publish(commandTopic.c_str(), message, retain);
     }
 
+#ifndef OUTPUT_HANDLE
     // only one listener will work, newest overwrites previous
     void onRGBW(std::function<void(Color_RGBW)> _listener)
     {
         rgbw_listener = _listener;
     }
+#endif
     // end-if rgbw_supported
 
     // start-if rgbww_supported
@@ -1282,11 +1395,13 @@ public:
         device.publish(commandTopic.c_str(), message, retain);
     }
 
+#ifndef OUTPUT_HANDLE
     // only one listener will work, newest overwrites previous
     void onRGBWW(std::function<void(Color_RGBWW)> _listener)
     {
         rgbww_listener = _listener;
     }
+#endif
     // end-if rgbww_supported
 
     // start-if hs_supported
@@ -1313,11 +1428,13 @@ public:
         device.publish(commandTopic.c_str(), message, retain);
     }
 
+#ifndef OUTPUT_HANDLE
     // only one listener will work, newest overwrites previous
     void onHS(std::function<void(Color_HS)> _listener)
     {
         hs_listener = _listener;
     }
+#endif
     // end-if hs_supported
 
     // start-if xy_supported
@@ -1342,11 +1459,13 @@ public:
         device.publish(commandTopic.c_str(), message, retain);
     }
 
+#ifndef OUTPUT_HANDLE
     // only one listener will work, newest overwrites previous
     void onXY(std::function<void(Color_XY)> _listener)
     {
         xy_listener = _listener;
     }
+#endif
     // end-if xy_supported
 
     // start-if effects_supported
@@ -1392,10 +1511,12 @@ public:
         device.publish(commandTopic.c_str(), message, retain);
     }
 
+#ifndef OUTPUT_HANDLE
     // only one listener will work, newest overwrites previous
     void onEffect(std::function<void(Effect)> _listener)
     {
         effect_listener = _listener;
     }
+#endif
     // end-if effects_supported
 } VAR_NAME;

@@ -52,6 +52,12 @@ const yaml = require('js-yaml')
  *      flash_time_long?: number
  *      flash_time_short?: number
  *      resolution?: number
+ *      pin?: string
+ *      pinR?: string
+ *      pinG?: string
+ *      pinB?: string
+ *      pinW?: string
+ *      pinC?: string
  *      min?: number
  *      max?: number
  *      step?: number
@@ -149,7 +155,8 @@ function toCodeName(name) {
 const components = {}
 
 for (const fileName of fs.readdirSync(`${__dirname}/components/`)) {
-    components[fileName.slice(0, -2)] = fs.readFileSync(`${__dirname}/components/${fileName}`).toString()
+    const temp = fs.readFileSync(`${__dirname}/components/${fileName}`).toString()
+    components[fileName.slice(0, -2)] = temp.slice(temp.indexOf(startIdentifier) + startIdentifier.length)
 }
 
 const discoveryPrefix = 'homeassistant'
@@ -175,8 +182,7 @@ const startIdentifier = '// start\r\n'
  */
 const availabilityTopic = (device.availability !== false) ? `home/${toCodeName(device.name)}/availability` : null
 
-// remove the part before the start identifier,
-outputHeader += components['manager'].slice(components['manager'].indexOf(startIdentifier) + startIdentifier.length)
+outputHeader += components['manager']
     // uncomment all "// uncomment:..." commands,
     .replace(/\/\/ uncomment:/g, '')
     // replace AVAILABILITY_TOPIC
@@ -199,21 +205,14 @@ outputHeader += '\n\n'
  */
 function processFeature(feature, jsonFeature) {
     /**
-     * @type {string}
-     */
-    let component = components[feature.class]
-
-    // process if conditions
-
-    /**
      * @type {string[]}
      */
-    let componentLines = component.split('\n')
+    const componentLines = components[feature.class].split('\n')
 
     /**
      * @type {{condition: string, result: boolean}[]}
      */
-    let conditionResultList = []
+    const conditionResultList = []
 
     componentLines.filter(line => line.includes('// start-if ')).forEach(line => {
         /**
@@ -239,14 +238,14 @@ function processFeature(feature, jsonFeature) {
             case 'rgbw_supported':
                 conditionResult = feature.mode === 'rgbw'
                 break
+            case 'rgb_supported':
+                conditionResult = feature.mode === 'rgb'
+                break
             case 'hs_supported':
                 conditionResult = feature.mode === 'hs'
                 break
             case 'xy_supported':
                 conditionResult = feature.mode === 'xy'
-                break
-            case 'rgb_supported':
-                conditionResult = feature.mode === 'rgb'
                 break
             default:
                 throw new Error(`start-if condition invalid, "${condition}"`)
@@ -270,10 +269,48 @@ function processFeature(feature, jsonFeature) {
         }
     }
 
-    component = componentLines.join('\n')
+    /**
+     * @type {Record<string,string>}
+     */
+    const defs = {}
 
-    // remove the part before the start identifier
-    component = component.slice(component.indexOf(startIdentifier) + startIdentifier.length)
+    const pins = ['pin', 'pinR', 'pinG', 'pinB', 'pinW', 'pinC']
+
+    if (pins.some(pin => pin in feature)) {
+        defs.OUTPUT_HANDLE = ''
+
+        if (pins.some(pin => feature[pin]?.includes('\n')))
+            throw new Error('feature config has multiline pin definition, which couldn\'t possibly result in a valid pin')
+
+        for (const pin of pins) {
+            if (!(pin in feature))
+                continue
+
+            let defName = 'OUTPUT_PIN'
+            if (pin !== 'pin')
+                defName += '_' + pin.at(-1)
+            defs[defName] = feature[pin]
+        }
+
+        if (feature.mode === 'onoff') {
+            if (pins.some(pin => pin !== 'pin' && pin in feature))
+                throw new Error('feature config has multiple pins set, yet only "pin" is allowed for "onoff" mode')
+
+            defs.OUTPUT_MODE_ONOFF = ''
+        }
+
+        // TODO: for smart RGB/RGBW/RGBWW
+        defs.OUTPUT_DATA = ''
+
+
+        if (Object.keys(defs).length) {
+            componentLines.unshift(...Object.entries(defs).map(([key, value]) => `#define ${key} ${value}`))
+            componentLines.push(...Object.keys(defs).map((key) => `#undef ${key}`))
+        }
+    }
+
+    // replace special keywords with content
+    return componentLines.join('\n')
         // uncomment all "// uncomment:..." commands
         .replace(/\/\/ uncomment:/g, '')
         // insert effect-list-enum
@@ -315,8 +352,6 @@ function processFeature(feature, jsonFeature) {
         // replace MAX
         .replace(/MAX/g, jsonFeature.max)
         + '\n'
-
-    return component
 }
 
 device.features.forEach((feature, index) => {
@@ -371,6 +406,9 @@ device.features.forEach((feature, index) => {
             haMqtt.brightness_scale = 2 ** (feature.resolution ?? 8) - 1
             haMqtt.effect_list = feature.effect_list
             haMqtt.effect = feature.effect_list !== undefined && feature.effect_list.length > 0
+
+            if ('resolution' in feature && !(haMqtt.brightness && (!feature.mode || feature.mode === 'brightness' || feature.mode === 'color_temp')))
+                throw new Error('resolution property is only allowed in brightness and color_temp modes, all other modes use 8-bit values');
             break
         case 'lock':
             haMqtt.command_topic = `~/command`

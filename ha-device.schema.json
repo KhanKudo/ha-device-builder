@@ -196,7 +196,148 @@
                                 "minimum": 1,
                                 "maximum": 32
                             }
-                        }
+                        },
+                        "oneOf": [
+                            {
+                                "properties": {
+                                    "mode": {
+                                        "enum": [
+                                            "onoff"
+                                        ]
+                                    },
+                                    "pin": {
+                                        "description": "The pin on which to output On/Off (High/Low) signals to, when light state is changed, Default: needs to be handled manually (Example Value: 'D8')",
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            {
+                                "properties": {
+                                    "mode": {
+                                        "enum": [
+                                            "brightness"
+                                        ]
+                                    },
+                                    "pin": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal, Default: needs to be handled manually (Example Value: 'D8')"
+                                    }
+                                }
+                            },
+                            {
+                                "properties": {
+                                    "mode": {
+                                        "enum": [
+                                            "color_temp"
+                                        ]
+                                    },
+                                    "pinW": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Warm White LEDs, Default: needs to be handled manually (Example Value: 'D7')"
+                                    },
+                                    "pinC": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Cold White LEDs, Default: needs to be handled manually (Example Value: 'D8')"
+                                    }
+                                }
+                            },
+                            {
+                                "properties": {
+                                    "mode": {
+                                        "enum": [
+                                            "hs",
+                                            "xy",
+                                            "rgb",
+                                            "rgbw",
+                                            "rgbww"
+                                        ]
+                                    },
+                                    "pin": {
+                                        "description": "The pin on which to output digital signals to control addressable RGB Pixels (e.g. WS2812), Default: needs to be handled manually (Example Value: 'D8')",
+                                        "type": "string"
+                                    },
+                                    "model": {
+                                        "description": "The Driver Chip Model, Default: DP1903 (a WS2812 cheap Variant)",
+                                        "type": "string",
+                                        "enum": [
+                                            "would be cool to have an ENUM here, maybe just with most popular"
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                "properties": {
+                                    "mode": {
+                                        "enum": [
+                                            "rgb"
+                                        ]
+                                    },
+                                    "pinR": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Red LEDs, Default: needs to be handled manually (Example Value: 'D6')",
+                                        "type": "string"
+                                    },
+                                    "pinG": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Green LEDs, Default: needs to be handled manually (Example Value: 'D7')",
+                                        "type": "string"
+                                    },
+                                    "pinB": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Blue LEDs, Default: needs to be handled manually (Example Value: 'D8')",
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            {
+                                "properties": {
+                                    "mode": {
+                                        "enum": [
+                                            "rgbw"
+                                        ]
+                                    },
+                                    "pinR": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Red LEDs, Default: needs to be handled manually (Example Value: 'D6')",
+                                        "type": "string"
+                                    },
+                                    "pinG": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Green LEDs, Default: needs to be handled manually (Example Value: 'D7')",
+                                        "type": "string"
+                                    },
+                                    "pinB": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Blue LEDs, Default: needs to be handled manually (Example Value: 'D8')",
+                                        "type": "string"
+                                    },
+                                    "pinW": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the White LEDs, Default: needs to be handled manually (Example Value: 'D9')",
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            {
+                                "properties": {
+                                    "mode": {
+                                        "enum": [
+                                            "rgbww"
+                                        ]
+                                    },
+                                    "pinR": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Red LEDs, Default: needs to be handled manually (Example Value: 'D6')",
+                                        "type": "string"
+                                    },
+                                    "pinG": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Green LEDs, Default: needs to be handled manually (Example Value: 'D7')",
+                                        "type": "string"
+                                    },
+                                    "pinB": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Blue LEDs, Default: needs to be handled manually (Example Value: 'D8')",
+                                        "type": "string"
+                                    },
+                                    "pinW": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Warm White LEDs, Default: needs to be handled manually (Example Value: 'D9')",
+                                        "type": "string"
+                                    },
+                                    "pinC": {
+                                        "description": "The pin on which to output a PWM (~16kHz) control signal for the Cold White LEDs, Default: needs to be handled manually (Example Value: 'D10')",
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        ]
                     },
                     {
                         "properties": {
