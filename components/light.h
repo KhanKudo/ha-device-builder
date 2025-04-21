@@ -146,7 +146,7 @@ struct NextMillis_XY
 #endif
 // end-if xy_supported
 
-class _VAR_NAME
+struct _VAR_NAME
 {
 private:
     const String name = "NAME";
@@ -323,7 +323,7 @@ public:
     const uint8_t resolution = RESOLUTION;
     // end-if brightness_supported
 
-    _VAR_NAME()
+    void _init()
     {
         if (!retain)
         {
@@ -336,27 +336,27 @@ public:
         digitalWrite(OUTPUT_PIN, 0);
 #else
 #ifdef OUTPUT_PIN
-        ledcAttach(OUTPUT_PIN, 16384, RESOLUTION);
+        ledcAttach(OUTPUT_PIN, 4096, RESOLUTION);
         ledcWrite(OUTPUT_PIN, 0);
 #endif
 #ifdef OUTPUT_PIN_R
-        ledcAttach(OUTPUT_PIN_R, 16384, RESOLUTION);
+        ledcAttach(OUTPUT_PIN_R, 4096, RESOLUTION);
         ledcWrite(OUTPUT_PIN_R, 0);
 #endif
 #ifdef OUTPUT_PIN_G
-        ledcAttach(OUTPUT_PIN_G, 16384, RESOLUTION);
+        ledcAttach(OUTPUT_PIN_G, 4096, RESOLUTION);
         ledcWrite(OUTPUT_PIN_G, 0);
 #endif
 #ifdef OUTPUT_PIN_B
-        ledcAttach(OUTPUT_PIN_B, 16384, RESOLUTION);
+        ledcAttach(OUTPUT_PIN_B, 4096, RESOLUTION);
         ledcWrite(OUTPUT_PIN_B, 0);
 #endif
 #ifdef OUTPUT_PIN_W
-        ledcAttach(OUTPUT_PIN_W, 16384, RESOLUTION);
+        ledcAttach(OUTPUT_PIN_W, 4096, RESOLUTION);
         ledcWrite(OUTPUT_PIN_W, 0);
 #endif
 #ifdef OUTPUT_PIN_C
-        ledcAttach(OUTPUT_PIN_C, 16384, RESOLUTION);
+        ledcAttach(OUTPUT_PIN_C, 4096, RESOLUTION);
         ledcWrite(OUTPUT_PIN_C, 0);
 #endif
 #endif

@@ -3,7 +3,7 @@
 #define RETAIN false
 
 // start
-class _VAR_NAME
+struct _VAR_NAME
 {
 private:
     const String name = "NAME";
@@ -19,7 +19,7 @@ private:
     bool stateIsLocked = false;
 
 public:
-    _VAR_NAME()
+   void _init()
     {
         if (!retain)
         {

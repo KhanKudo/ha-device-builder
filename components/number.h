@@ -6,7 +6,7 @@
 #define STEP 0
 
 // start
-class _VAR_NAME
+struct _VAR_NAME
 {
 private:
     const String name = "NAME";
@@ -25,7 +25,7 @@ public:
     const double max = MAX;
     const double step = STEP;
 
-    _VAR_NAME()
+   void _init()
     {
         if (!retain)
         {

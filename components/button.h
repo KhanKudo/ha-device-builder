@@ -1,7 +1,7 @@
 #include "manager.h"
 
 // start
-class _VAR_NAME
+struct _VAR_NAME
 {
 private:
     const String name = "NAME";
@@ -11,7 +11,7 @@ private:
     std::function<void(void)> listener = []() {};
 
 public:
-    _VAR_NAME()
+   void _init()
     {
         device.clearRetain(commandTopic.c_str());
         device.subscribe(commandTopic.c_str(), [this](String message)

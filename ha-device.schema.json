@@ -254,7 +254,7 @@
                                         "type": "string"
                                     },
                                     "model": {
-                                        "description": "The Driver Chip Model, Default: DP1903 (a WS2812 cheap Variant)",
+                                        "description": "The Driver Chip Model, Default: DP1903 (a cheap WS2812 variant)",
                                         "type": "string",
                                         "enum": [
                                             "would be cool to have an ENUM here, maybe just with most popular"

@@ -3,7 +3,7 @@
 #define RETAIN false
 
 // start
-class _VAR_NAME
+struct _VAR_NAME
 {
 private:
     const String name = "NAME";
@@ -15,7 +15,7 @@ private:
     std::function<void(void)> listener = []() {};
 
 public:
-    _VAR_NAME()
+   void _init()
     {
         if (!retain)
         {

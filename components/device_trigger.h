@@ -1,7 +1,7 @@
 #include "manager.h"
 
 // start
-class _VAR_NAME
+struct _VAR_NAME
 {
 private:
     const String name = "NAME";

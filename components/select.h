@@ -4,7 +4,7 @@
 #define NUMBER_OF_OPTIONS 0
 
 // start
-class _VAR_NAME
+struct _VAR_NAME
 {
 private:
     const String name = "NAME";
@@ -31,7 +31,7 @@ public:
         // __insert-option-list
     };
 
-    _VAR_NAME()
+   void _init()
     {
         if (!retain)
         {

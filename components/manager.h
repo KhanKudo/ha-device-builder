@@ -61,6 +61,8 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 #include <ezTime.h>
 #endif
 
+void _ha_device_init_features();
+
 struct _HA_DEVICE
 {
 private:
@@ -410,6 +412,8 @@ public:
             updateFirmware();
             /**/ });
 #endif
+
+        _ha_device_init_features();
 
         reconnect();
 

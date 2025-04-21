@@ -197,6 +197,11 @@ outputHeader += components['manager']
 outputHeader += '\n\n'
 
 /**
+ * @type {string[]}
+ */
+const allFeaturesVarNames = []
+
+/**
  *
  * @param {YamlFeature} feature
  * @param {JsonFeature} jsonFeature
@@ -309,6 +314,9 @@ function processFeature(feature, jsonFeature) {
         }
     }
 
+    const varName = feature.var_name ?? toCodeName(jsonFeature.name).replace(/-/g, '_')
+    allFeaturesVarNames.push(varName)
+
     // replace special keywords with content
     return componentLines.join('\n')
         // uncomment all "// uncomment:..." commands
@@ -338,7 +346,7 @@ function processFeature(feature, jsonFeature) {
         // replace RESOLUTION
         .replace(/RESOLUTION/g, feature.resolution ?? 8)
         // replace VAR_NAME
-        .replace(/VAR_NAME/g, feature.var_name ?? toCodeName(jsonFeature.name).replace(/-/g, '_'))
+        .replace(/VAR_NAME/g, varName)
         // replace RETAIN
         .replace(/RETAIN/g, jsonFeature.retain)
         // replace TOPIC
@@ -448,8 +456,12 @@ device.features.forEach((feature, index) => {
     outputHeader += '\n'
 })
 
+outputHeader += `void _ha_device_init_features()\n{${allFeaturesVarNames.map(name => `\n    ${name}._init();`).join('')}\n}`
+
 // insert discovery publish
 outputHeader = outputHeader.replace('// __insert-discovery-publish\r\n', haMqttJsonFeatures.map(jsonFeature => `publish("${jsonFeature['~']}/config", R"=-=-=(${JSON.stringify(jsonFeature)})=-=-=", true);`).join('\n\t\t') + '\n')
+
+outputHeader = outputHeader.replace(/^\s+$/gm, '\n')
 
 // write the output file
 fs.writeFileSync('include/ha-device.h', outputHeader)
