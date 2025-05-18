@@ -58,6 +58,9 @@ const yaml = require('js-yaml')
  *      pinB?: string
  *      pinW?: string
  *      pinC?: string
+ *      initial_state?: boolean
+ *      initial_brightness?: number
+ *      initial_temp?: number
  *      min?: number
  *      max?: number
  *      step?: number
@@ -281,6 +284,8 @@ function processFeature(feature, jsonFeature) {
 
     const pins = ['pin', 'pinR', 'pinG', 'pinB', 'pinW', 'pinC']
 
+    const initials = ['intitial_state', 'intitial_brightness', 'intitial_temp']
+
     if (pins.some(pin => pin in feature)) {
         defs.OUTPUT_HANDLE = ''
 
@@ -297,11 +302,41 @@ function processFeature(feature, jsonFeature) {
             defs[defName] = feature[pin]
         }
 
+        const maxBrightness = Math.pow(2, feature.resolution ?? 8) - 1
+
         if (feature.mode === 'onoff') {
+            if (initials.some(init => init !== 'initial_state' && init in feature))
+                throw new Error('feature config has an invalid \'initial_*\' set for "onoff" mode, only "initial_state" is allowed')
+
             if (pins.some(pin => pin !== 'pin' && pin in feature))
                 throw new Error('feature config has multiple pins set, yet only "pin" is allowed for "onoff" mode')
 
             defs.OUTPUT_MODE_ONOFF = ''
+            defs.INITIAL_BRIGHTNESS = (feature.initial_state ?? false) ? maxBrightness : 0
+        }
+        else if (feature.mode === 'brightness') {
+            if (initials.some(init => init !== 'initial_brightness' && init in feature))
+                throw new Error('feature config has an invalid \'initial_*\' set for "brightness" mode, only "initial_brightness" is allowed')
+
+            defs.INITIAL_BRIGHTNESS = feature.initial_brightness ?? 0
+        }
+        else if (feature.mode === 'color_temp') {
+            if (initials.some(init => init !== 'initial_brightness' && init !== 'initial_temp' && init in feature))
+                throw new Error('feature config has an invalid \'initial_*\' set for "color_temp" mode, only "initial_brightness" and "initial_temp" are allowed')
+
+            const min = feature.min_kelvin ?? 2700
+            const max = feature.max_kelvin ?? 6500
+            const cur = feature.initial_temp ?? 4000
+
+            if (cur < min)
+                throw new Error(`feature config has initial_temp set to ${cur} when minimum defined is ${min}`)
+            if (cur > max)
+                throw new Error(`feature config has initial_temp set to ${cur} when maximum defined is ${max}`)
+
+            const ratio = (cur - min) / (max - min)
+
+            defs.INITIAL_BRIGHTNESS_W = (feature.initial_brightness ?? 0) / 100 * maxBrightness * (1 - ratio)
+            defs.INITIAL_BRIGHTNESS_C = (feature.initial_brightness ?? 0) / 100 * maxBrightness * ratio
         }
 
         // TODO: for smart RGB/RGBW/RGBWW
@@ -312,6 +347,9 @@ function processFeature(feature, jsonFeature) {
             componentLines.unshift(...Object.entries(defs).map(([key, value]) => `#define ${key} ${value}`))
             componentLines.push(...Object.keys(defs).map((key) => `#undef ${key}`))
         }
+    }
+    else if (initials.some(init => init in feature)) {
+        throw new Error('feature config has an \'initial_*\' property set, which requires a \'pin*\' property')
     }
 
     const varName = feature.var_name ?? toCodeName(jsonFeature.name).replace(/-/g, '_')

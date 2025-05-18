@@ -208,6 +208,10 @@
                                     "pin": {
                                         "description": "The pin on which to output On/Off (High/Low) signals to, when light state is changed, Default: needs to be handled manually (Example Value: 'D8')",
                                         "type": "string"
+                                    },
+                                    "initial_state": {
+                                        "description": "The initial state (on/off) the light takes on before the device connects to homeassistant, Default: false (off)",
+                                        "type": "boolean"
                                     }
                                 }
                             },
@@ -220,6 +224,12 @@
                                     },
                                     "pin": {
                                         "description": "The pin on which to output a PWM (~16kHz) control signal, Default: needs to be handled manually (Example Value: 'D8')"
+                                    },
+                                    "initial_brightness": {
+                                        "description": "The initial brightness in percent (0-100) the light is set to before the device connects to homeassistant, Default: 0 (off)",
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 100
                                     }
                                 }
                             },
@@ -235,6 +245,18 @@
                                     },
                                     "pinC": {
                                         "description": "The pin on which to output a PWM (~16kHz) control signal for the Cold White LEDs, Default: needs to be handled manually (Example Value: 'D8')"
+                                    },
+                                    "initial_brightness": {
+                                        "description": "The initial brightness in percent (0-100) the light is set to before the device connects to homeassistant, Default: 0 (off)",
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 100
+                                    },
+                                    "initial_temp": {
+                                        "description": "The initial color temperature in kelvin the light is set to before the device connects to homeassistant, Default: 4000 (a little warm)",
+                                        "type": "number",
+                                        "minimum": 2000,
+                                        "maximum": 6535
                                     }
                                 }
                             },

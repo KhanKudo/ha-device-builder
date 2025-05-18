@@ -19,6 +19,9 @@
 #define OUTPUT_PIN_W GPIO_NUM_9
 #define OUTPUT_PIN_C GPIO_NUM_10
 
+#define INITIAL_BRIGHTNESS 0
+#define INITIAL_TEMP 4000
+
 // start
 
 #include <ArduinoJson.h>
@@ -333,11 +336,11 @@ public:
 
 #ifdef OUTPUT_MODE_ONOFF
         pinMode(OUTPUT_PIN, OUTPUT);
-        digitalWrite(OUTPUT_PIN, 0);
+        digitalWrite(OUTPUT_PIN, INITIAL_BRIGHTNESS);
 #else
 #ifdef OUTPUT_PIN
         ledcAttach(OUTPUT_PIN, 4096, RESOLUTION);
-        ledcWrite(OUTPUT_PIN, 0);
+        ledcWrite(OUTPUT_PIN, INITIAL_BRIGHTNESS);
 #endif
 #ifdef OUTPUT_PIN_R
         ledcAttach(OUTPUT_PIN_R, 4096, RESOLUTION);
@@ -353,11 +356,11 @@ public:
 #endif
 #ifdef OUTPUT_PIN_W
         ledcAttach(OUTPUT_PIN_W, 4096, RESOLUTION);
-        ledcWrite(OUTPUT_PIN_W, 0);
+        ledcWrite(OUTPUT_PIN_W, INITIAL_BRIGHTNESS_W);
 #endif
 #ifdef OUTPUT_PIN_C
         ledcAttach(OUTPUT_PIN_C, 4096, RESOLUTION);
-        ledcWrite(OUTPUT_PIN_C, 0);
+        ledcWrite(OUTPUT_PIN_C, INITIAL_BRIGHTNESS_C);
 #endif
 #endif
 
