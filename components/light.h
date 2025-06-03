@@ -339,27 +339,27 @@ public:
         digitalWrite(OUTPUT_PIN, INITIAL_BRIGHTNESS);
 #else
 #ifdef OUTPUT_PIN
-        ledcAttach(OUTPUT_PIN, 4096, RESOLUTION);
+        ledcAttach(OUTPUT_PIN, 16384, RESOLUTION);
         ledcWrite(OUTPUT_PIN, INITIAL_BRIGHTNESS);
 #endif
 #ifdef OUTPUT_PIN_R
-        ledcAttach(OUTPUT_PIN_R, 4096, RESOLUTION);
+        ledcAttach(OUTPUT_PIN_R, 16384, RESOLUTION);
         ledcWrite(OUTPUT_PIN_R, 0);
 #endif
 #ifdef OUTPUT_PIN_G
-        ledcAttach(OUTPUT_PIN_G, 4096, RESOLUTION);
+        ledcAttach(OUTPUT_PIN_G, 16384, RESOLUTION);
         ledcWrite(OUTPUT_PIN_G, 0);
 #endif
 #ifdef OUTPUT_PIN_B
-        ledcAttach(OUTPUT_PIN_B, 4096, RESOLUTION);
+        ledcAttach(OUTPUT_PIN_B, 16384, RESOLUTION);
         ledcWrite(OUTPUT_PIN_B, 0);
 #endif
 #ifdef OUTPUT_PIN_W
-        ledcAttach(OUTPUT_PIN_W, 4096, RESOLUTION);
+        ledcAttach(OUTPUT_PIN_W, 16384, RESOLUTION);
         ledcWrite(OUTPUT_PIN_W, INITIAL_BRIGHTNESS_W);
 #endif
 #ifdef OUTPUT_PIN_C
-        ledcAttach(OUTPUT_PIN_C, 4096, RESOLUTION);
+        ledcAttach(OUTPUT_PIN_C, 16384, RESOLUTION);
         ledcWrite(OUTPUT_PIN_C, INITIAL_BRIGHTNESS_C);
 #endif
 #endif
