@@ -447,6 +447,11 @@ public:
                             if(jsonMsg.containsKey("color_temp")){
                                 if(jsonMsg.containsKey("transition")){
                                     color_temp_target = jsonMsg["color_temp"];
+
+                                    // if way too low for kelvin, treat as mireds and convert to kelvin
+                                    if(color_temp_target < 1000)
+                                        color_temp_target = 1000000 / color_temp_target;
+
                                     if(color_temp != color_temp_target){
                                         color_temp_step = max(1, (int)min(abs((float)color_temp_target - (float)color_temp), round(abs((float)color_temp_target - (float)color_temp) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
                                         color_temp_delta_ms = round((1000.0f * (float)jsonMsg["transition"] * (float)color_temp_step) / abs((float)color_temp_target - (float)color_temp));
@@ -455,6 +460,10 @@ public:
                                 }
                                 else{
                                     color_temp = jsonMsg["color_temp"];
+                                    // if way too low for kelvin, treat as mireds and convert to kelvin
+                                    if(color_temp < 1000)
+                                        color_temp = 1000000 / color_temp;
+                                        
                                     color_temp_step = 0;
                                 }
                                 jsonState["color_temp"] = jsonMsg["color_temp"];
