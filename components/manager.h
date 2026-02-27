@@ -1,12 +1,11 @@
+#define OTA_UPDATE
+#define DEVICE_REGISTRATION_PUBLISH_DATA = 1
 // start
 #include <Arduino.h>
 #ifdef OTA_UPDATE
 #include <ArduinoOTA.h>
 #endif
 #include <PubSubClient.h>
-#ifdef OTA_UPDATE
-#include <WebSocketsClient.h>
-#endif
 
 #ifdef ESP32
 const char root_ca[] PROGMEM = R"EOF(
@@ -93,9 +92,6 @@ private:
     WiFiClient wifiClient;
     WiFiClientSecure wifiClientSecure;
     PubSubClient client = PubSubClient(wifiClient);
-#ifdef OTA_UPDATE
-    WebSocketsClient webSocket;
-#endif
 
     String availabilityTopic = "AVAILABILITY_TOPIC";
 
@@ -104,25 +100,142 @@ private:
     uint32_t lastMillis = 0;
 
 #ifdef OTA_UPDATE
-    const struct
+    enum ServerType
     {
-        String RESTART_DEVICE = "RESTART_DEVICE";
-        String REGISTER = "REGISTER";
-        String AWAITING_UPDATE_SIZE = "AWAITING_UPDATE_SIZE";
-        String UPDATE_SIZE = "UPDATE_SIZE"; // UPDATE_SIZE ${SIZE in bytes}
-        String START_OTA = "START_OTA";
-        String END_OTA = "END_OTA";
-        String START_DATA_UPLOAD = "START_DATA_UPLOAD";
-        String UPDATE_SUCCESSFUL = "UPDATE_SUCCESSFUL";
-        String NEXT_CHUNK = "NEXT_CHUNK";
-        String OK = "OK";
-        String ERROR = "ERROR";
-    } WebSocketType;
+        UPDATE_AVAILABLE,
+        UPDATE_SIZE,
+        CHUNK,
+        RESTART_DEVICE,
+        ABORT_UPDATE
+    };
+
+    enum ClientType
+    {
+        REGISTER, // MUST BE VALUE 0 (zero, null, '\0')
+        GET_UPDATE_SIZE,
+        GET_FIRST_CHUNK, // determines chunksize
+        GET_CHUNK,
+        UPDATE_SUCCESSFUL,
+        UPDATE_FAILED
+    };
+
+    bool waitingForUpdateSize = false;
+    bool isUpdating = false;
+    uint16_t chunkIndex = 0;
+    String otaServer = "dev/DEVICE_ID_MD5_HASHED_HEXADECIMAL/s";
+    const char otaClient[39] = "dev/DEVICE_ID_MD5_HASHED_HEXADECIMAL/c";
+    uint8_t otaTX[5];
+    uint32_t remainingBytes = 0;
 #endif
 
     std::function<void(char *, byte *, unsigned int)> callback = [this](char *char_topic, byte *payload, unsigned int length)
     {
         String topic = char_topic;
+
+#ifdef OTA_UPDATE
+        if (topic == otaServer)
+        {
+            if (payload[0] == ServerType::UPDATE_AVAILABLE)
+            {
+                if (waitingForUpdateSize || isUpdating)
+                    goto ota_fail;
+
+                // Serial.println("Updating firmware...");
+                waitingForUpdateSize = true;
+
+                otaTX[0] = ClientType::GET_UPDATE_SIZE;
+                client.publish(otaClient, otaTX, 1, false);
+            }
+            else if (payload[0] == ServerType::UPDATE_SIZE)
+            {
+                if (!waitingForUpdateSize || length != 5)
+                    goto ota_fail;
+
+                remainingBytes = *(uint32_t *)(payload + 1);
+
+                if (!Update.begin(remainingBytes))
+                    goto ota_fail;
+
+                isUpdating = true;
+                waitingForUpdateSize = false;
+                otaTX[0] = ClientType::GET_FIRST_CHUNK;
+                chunkIndex = 0;
+                *(uint16_t *)(otaTX + 1) = (uint16_t)250;
+                client.publish(otaClient, otaTX, 3, false);
+            }
+            else if (payload[0] == ServerType::CHUNK)
+            {
+                if (!isUpdating || length < 4 || remainingBytes < length - 3)
+                    goto ota_fail;
+
+                if (*(uint16_t *)(payload + 1) != chunkIndex)
+                    goto ota_fail;
+
+                if (Update.write(payload + 3, length - 3) != length - 3)
+                {
+                    Update.printError(Serial);
+                    goto ota_fail;
+                }
+
+                remainingBytes -= length - 3;
+                if (remainingBytes == 0)
+                {
+                    if (!Update.end())
+                        goto ota_fail;
+
+                    isUpdating = false;
+                    otaTX[0] = ClientType::UPDATE_SUCCESSFUL;
+                    client.publish(otaClient, otaTX, 1, false);
+                }
+                else
+                {
+                    otaTX[0] = ClientType::GET_CHUNK;
+                    chunkIndex++;
+                    *(uint16_t *)(otaTX + 1) = chunkIndex;
+                    client.publish(otaClient, otaTX, 3, false);
+                }
+            }
+            else if (payload[0] == ServerType::RESTART_DEVICE)
+            {
+#ifdef ESP32
+                if (isUpdating)
+                    Update.abort();
+#endif
+                // Serial.printf("RESTART_DEVICE command received\n");
+                // Serial.printf("Restarting...\n");
+
+                client.disconnect();
+                // WiFi.reconnect();
+                ESP.restart();
+            }
+            else if (payload[0] == ServerType::ABORT_UPDATE)
+            {
+#ifdef ESP32
+                if (isUpdating)
+                    Update.abort();
+#endif
+                isUpdating = false;
+                waitingForUpdateSize = false;
+                // Serial.printf("ABORT_UPDATE command received\n");
+            }
+
+            return;
+        ota_fail:
+            if (isUpdating)
+            {
+#ifdef ESP32
+                Update.abort();
+#endif
+                isUpdating = false;
+            }
+
+            waitingForUpdateSize = false;
+            otaTX[0] = ClientType::UPDATE_FAILED;
+            client.publish(otaClient, otaTX, 1, false);
+            return;
+        }
+#endif
+
         String message = "";
 
         for (int i = 0; i < length; i++)
@@ -151,146 +264,12 @@ private:
         }
     }
 
-#ifdef OTA_UPDATE
-    bool attemptingUpdate = false;
-    bool isUpdating = false;
-    bool waitingForUpdateSize = false;
-
-    // Define a lambda that calls the original function
-    std::function<void(WStype_t, uint8_t *, size_t)> webSocketEvent = [this](WStype_t type, uint8_t *payload, size_t length)
-    {
-        switch (type)
-        {
-        case WStype_DISCONNECTED:
-            Serial.printf("[WSc] Disconnected!\n");
-
-            if (isUpdating)
-            {
-#ifdef ESP32
-                Update.abort();
-#endif
-
-                isUpdating = false;
-            }
-
-            waitingForUpdateSize = false;
-            break;
-        case WStype_CONNECTED:
-        {
-            Serial.printf("[WSc] Connected to url: %s\n", payload);
-
-            // send message to server when connected
-            String registerStr = String(WebSocketType.REGISTER);
-            registerStr.concat(" ");
-            registerStr.concat(id);
-            registerStr.concat(" ");
-            registerStr.concat("HA_DEVICE_PLACEHOLDER_HASH");
-
-            webSocket.sendTXT(registerStr);
-        }
-        break;
-        case WStype_TEXT:
-        {
-            Serial.printf("[WSc] get text: %s\n", payload);
-            String msg = String((char *)payload);
-
-            if (msg.equals(WebSocketType.START_OTA))
-            {
-                if (isUpdating || waitingForUpdateSize)
-                {
-                    webSocket.sendTXT(WebSocketType.ERROR.c_str()); // an update is already in progress
-                }
-                else
-                {
-                    waitingForUpdateSize = true;
-                    webSocket.sendTXT(WebSocketType.AWAITING_UPDATE_SIZE.c_str());
-                }
-            }
-            else if (msg.equals(WebSocketType.END_OTA))
-            {
-                if (!isUpdating)
-                {
-                    webSocket.sendTXT(WebSocketType.ERROR.c_str()); // no update is currently active
-                }
-                else
-                {
-                    isUpdating = false;
-
-                    if (Update.end())
-                    {
-                        webSocket.sendTXT(WebSocketType.UPDATE_SUCCESSFUL.c_str());
-                        delay(2500);
-                        webSocket.disconnect();
-                        delay(500);
-                        ESP.restart();
-                    }
-                    else
-                    {
-                        webSocket.sendTXT(WebSocketType.ERROR.c_str());
-                    }
-                }
-            }
-            else if (waitingForUpdateSize && msg.startsWith(WebSocketType.UPDATE_SIZE))
-            {
-                size_t updateSize = msg.substring(WebSocketType.UPDATE_SIZE.length()).toInt();
-
-                if (Update.begin(updateSize))
-                {
-                    isUpdating = true;
-                    waitingForUpdateSize = false;
-                    webSocket.sendTXT(WebSocketType.START_DATA_UPLOAD.c_str());
-                }
-                else
-                {
-                    Update.printError(Serial);
-                    webSocket.sendTXT(WebSocketType.ERROR.c_str());
-                }
-            }
-            else if (msg.equals(WebSocketType.RESTART_DEVICE))
-            {
-                Serial.printf("RESTART_DEVICE command received\n");
-                Serial.printf("Restarting...\n");
-
-                // WiFi.reconnect();
-                ESP.restart();
-            }
-            break;
-        }
-        case WStype_BIN:
-            Serial.printf("[WSc] get binary length: %u\n", (uint)length);
-            // hexdump(payload, length);
-
-            if (isUpdating)
-            {
-                if (Update.write(payload, length) == length)
-                {
-                    webSocket.sendTXT(WebSocketType.NEXT_CHUNK.c_str());
-                }
-                else
-                {
-                    Update.printError(Serial);
-                    webSocket.sendTXT(WebSocketType.ERROR.c_str());
-                }
-            }
-            break;
-        case WStype_PING:
-            // pong will be send automatically
-            // Serial.printf("[WSc] get ping\n");
-            break;
-        case WStype_PONG:
-            // answer to a ping we send
-            // Serial.printf("[WSc] get pong\n");
-            break;
-        default:
-            Serial.printf("[WSc] get unrecognised message type\n");
-            break;
-        }
-    };
-#endif
-
     void connected()
     {
         client.subscribe("homeassistant/status");
+#ifdef OTA_UPDATE
+        client.subscribe(otaServer.c_str());
+#endif
 
         for (auto it = listeners.cbegin(); it != listeners.cend(); it++)
         {
@@ -302,28 +281,6 @@ private:
             client.publish(availabilityTopic.c_str(), "online", true);
         }
     }
-
-#ifdef OTA_UPDATE
-    void updateFirmware()
-    {
-        Serial.println("Updating firmware...");
-        attemptingUpdate = true;
-
-        Serial.println("Disconnecting from MQTT server...");
-        client.disconnect();
-
-        Serial.println("Connecting to WebSocket server...");
-
-#ifdef ESP32
-        webSocket.beginSslWithCA(_broker, 443, "/ws", root_ca);
-#elif defined(ESP8266)
-        webSocket.beginSSL(_broker, 443, "/ws");
-#endif
-        webSocket.onEvent(webSocketEvent);
-        // webSocket.setReconnectInterval(5000);
-        // webSocket.enableHeartbeat(15000, 3000, 2);
-    }
-#endif
 
     const char *_ssid;
     const char *_password;
@@ -349,6 +306,8 @@ public:
         _port = port;
         _user = user;
         _pass = pass;
+
+        _ha_device_init_features();
 
         if (isEncrypted)
         {
@@ -403,26 +362,12 @@ public:
             }
             /**/ });
 
-#ifdef OTA_UPDATE
-        subscribe("device-version-manager/update-available-for", [this](String deviceId)
-                  {
-            if (!deviceId.equals(id))
-                return;
-
-            updateFirmware();
-            /**/ });
-#endif
-
-        _ha_device_init_features();
-
         reconnect();
 
         // __insert-discovery-publish
 
 #ifdef OTA_UPDATE
-        String hash = String("HA_DEVICE_PLACEHOLDER_HASH");
-
-        publish(("device-version-manager/register/" + id).c_str(), (hash + " " + availabilityTopic).c_str(), true);
+        client.publish(otaClient, (uint8_t *)"\0DEVICE_ID_MD5_HASHED_HEXADECIMAL0000000000000000", 49, true);
 #endif
     }
 
@@ -448,12 +393,20 @@ public:
         if (!WiFi.isConnected())
             return;
 
-        if (
-#ifdef OTA_UPDATE
-            !attemptingUpdate &&
-#endif
-            !client.connected())
+        if (!client.connected())
         {
+#ifdef OTA_UPDATE
+            if (waitingForUpdateSize || isUpdating)
+            {
+#ifdef ESP32
+                if (isUpdating)
+                    Update.abort();
+#endif
+                waitingForUpdateSize = false;
+                isUpdating = false;
+            }
+#endif
+
             if (restartTimeout == 0)
             {
                 restartTimeout = millis() + 5 * 60 * 1000; // 5 Minutes
@@ -469,15 +422,9 @@ public:
             }
         }
 
-#ifdef OTA_UPDATE
-        if (attemptingUpdate)
-            webSocket.loop();
-        else
-            client.loop();
-            
-        ArduinoOTA.handle();
-#else
         client.loop();
+#ifdef OTA_UPDATE
+        ArduinoOTA.handle();
 #endif
 
 #ifdef TIME

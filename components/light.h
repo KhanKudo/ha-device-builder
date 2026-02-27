@@ -328,12 +328,6 @@ public:
 
     void _init()
     {
-        if (!retain)
-        {
-            device.clearRetain(commandTopic.c_str());
-            device.clearRetain(stateTopic.c_str());
-        }
-
 #ifdef OUTPUT_MODE_ONOFF
         pinMode(OUTPUT_PIN, OUTPUT);
         digitalWrite(OUTPUT_PIN, INITIAL_BRIGHTNESS);
@@ -363,6 +357,12 @@ public:
         ledcWrite(OUTPUT_PIN_C, INITIAL_BRIGHTNESS_C);
 #endif
 #endif
+
+        if (!retain)
+        {
+            device.clearRetain(commandTopic.c_str());
+            device.clearRetain(stateTopic.c_str());
+        }
 
         device.subscribe(commandTopic.c_str(), [this](String message)
                          {
