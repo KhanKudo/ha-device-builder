@@ -159,7 +159,7 @@ void handleMsg(byte *payload)
         timeoutMillis = millis() + 5000;
         while (datalen > 0 && millis() < timeoutMillis)
         {
-            readable = max(lenRX, (uint16_t)client.available());
+            readable = max(min(datalen,lenRX), (uint16_t)client.available());
             if (readable == 0)
                 continue;
             client.read(payload, readable);

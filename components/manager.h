@@ -1,5 +1,4 @@
 #define OTA_UPDATE
-#define DEVICE_REGISTRATION_PUBLISH_DATA = 1
 // start
 #include <Arduino.h>
 #ifdef OTA_UPDATE
