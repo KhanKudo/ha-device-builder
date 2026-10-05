@@ -13,11 +13,17 @@
 #define OUTPUT_MODE_ONOFF
 
 #define OUTPUT_PIN GPIO_NUM_8
+#define OUTPUT_INVERT 1
 #define OUTPUT_PIN_R GPIO_NUM_6
+#define OUTPUT_INVERT_R 255
 #define OUTPUT_PIN_G GPIO_NUM_7
+#define OUTPUT_INVERT_G 255
 #define OUTPUT_PIN_B GPIO_NUM_8
+#define OUTPUT_INVERT_B 255
 #define OUTPUT_PIN_W GPIO_NUM_9
+#define OUTPUT_INVERT_W 255
 #define OUTPUT_PIN_C GPIO_NUM_10
+#define OUTPUT_INVERT_C 255
 
 #define INITIAL_BRIGHTNESS 0
 #define INITIAL_TEMP 4000
@@ -167,7 +173,7 @@ private:
 #ifdef OUTPUT_MODE_ONOFF
     std::function<void(bool)> state_listener = [](bool state)
     {
-        digitalWrite(OUTPUT_PIN, state);
+        digitalWrite(OUTPUT_PIN, OUTPUT_INVERT ? !state : state);
     };
 #elif !defined(OUTPUT_HANDLE)
     std::function<void(bool)> state_listener = [](bool) {};
@@ -184,10 +190,10 @@ private:
     std::function<void(UINT_RESOLUTION_T)> brightness_listener = [this](UINT_RESOLUTION_T brightness)
     {
 #ifdef OUTPUT_PIN
-        ledcWrite(OUTPUT_PIN, brightness);
+        ledcWrite(OUTPUT_PIN, OUTPUT_INVERT ? OUTPUT_INVERT - brightness : brightness);
 #elif defined(OUTPUT_PIN_W) && !defined(OUTPUT_PIN_R)
-        ledcWrite(OUTPUT_PIN_W, getWarm());
-        ledcWrite(OUTPUT_PIN_C, getCold());
+        ledcWrite(OUTPUT_PIN_W, OUTPUT_INVERT_W ? OUTPUT_INVERT_W - getWarm() : getWarm());
+        ledcWrite(OUTPUT_PIN_C, OUTPUT_INVERT_C ? OUTPUT_INVERT_C - getCold() : getCold());
 #endif
     };
 #else
@@ -223,9 +229,9 @@ private:
     std::function<void(Color_RGB)> rgb_listener = [](Color_RGB rgb)
     {
         // TODO handle brightness somehow
-        ledcWrite(OUTPUT_PIN_R, rgb.r);
-        ledcWrite(OUTPUT_PIN_G, rgb.g);
-        ledcWrite(OUTPUT_PIN_B, rgb.b);
+        ledcWrite(OUTPUT_PIN_R, OUTPUT_INVERT_R ? OUTPUT_INVERT_R - rgb.r : rgb.r);
+        ledcWrite(OUTPUT_PIN_G, OUTPUT_INVERT_G ? OUTPUT_INVERT_G - rgb.g : rgb.g);
+        ledcWrite(OUTPUT_PIN_B, OUTPUT_INVERT_B ? OUTPUT_INVERT_B - rgb.b : rgb.b);
     };
 #else
     std::function<void(Color_RGB)> rgb_listener = [](Color_RGB) {};
@@ -244,10 +250,10 @@ private:
     std::function<void(Color_RGBW)> rgbw_listener = [](Color_RGBW rgbw)
     {
         // TODO handle brightness somehow
-        ledcWrite(OUTPUT_PIN_R, rgbw.r);
-        ledcWrite(OUTPUT_PIN_G, rgbw.g);
-        ledcWrite(OUTPUT_PIN_B, rgbw.b);
-        ledcWrite(OUTPUT_PIN_W, rgbw.w);
+        ledcWrite(OUTPUT_PIN_R, OUTPUT_INVERT_R ? OUTPUT_INVERT_R - rgbw.r : rgbw.r);
+        ledcWrite(OUTPUT_PIN_G, OUTPUT_INVERT_G ? OUTPUT_INVERT_G - rgbw.g : rgbw.g);
+        ledcWrite(OUTPUT_PIN_B, OUTPUT_INVERT_B ? OUTPUT_INVERT_B - rgbw.b : rgbw.b);
+        ledcWrite(OUTPUT_PIN_W, OUTPUT_INVERT_W ? OUTPUT_INVERT_W - rgbw.w : rgbw.w);
     };
 #else
     std::function<void(Color_RGBW)> rgbw_listener = [](Color_RGBW) {};
@@ -266,11 +272,11 @@ private:
     std::function<void(Color_RGBWW)> rgbww_listener = [](Color_RGBWW rgbww)
     {
         // TODO handle brightness somehow
-        ledcWrite(OUTPUT_PIN_R, rgbww.r);
-        ledcWrite(OUTPUT_PIN_G, rgbww.g);
-        ledcWrite(OUTPUT_PIN_B, rgbww.b);
-        ledcWrite(OUTPUT_PIN_W, rgbww.w);
-        ledcWrite(OUTPUT_PIN_C, rgbww.c);
+        ledcWrite(OUTPUT_PIN_R, OUTPUT_INVERT_R ? OUTPUT_INVERT_R - rgbww.r : rgbww.r);
+        ledcWrite(OUTPUT_PIN_G, OUTPUT_INVERT_G ? OUTPUT_INVERT_G - rgbww.g : rgbww.g);
+        ledcWrite(OUTPUT_PIN_B, OUTPUT_INVERT_B ? OUTPUT_INVERT_B - rgbww.b : rgbww.b);
+        ledcWrite(OUTPUT_PIN_W, OUTPUT_INVERT_W ? OUTPUT_INVERT_W - rgbww.w : rgbww.w);
+        ledcWrite(OUTPUT_PIN_C, OUTPUT_INVERT_C ? OUTPUT_INVERT_C - rgbww.c : rgbww.c);
     };
 #else
     std::function<void(Color_RGBWW)> rgbww_listener = [](Color_RGBWW) {};
@@ -384,7 +390,7 @@ public:
 
                             if(jsonMsg.containsKey("state")){
                                 if(jsonMsg["state"] != "ON" && jsonMsg["state"] != "OFF") return;
-                                
+
                                 bool newState = jsonMsg["state"] == "ON";
                                 if(state != newState){
                                     state = newState;
@@ -394,7 +400,7 @@ public:
                                         if(jsonMsg.containsKey("transition")){
                                             if(!newState && brightness != 0)
                                                 state = true;
-                                            
+
                                             brightnessTarget = newState ? jsonRetainedCommand["brightness"] : 0;
                                             if(brightness != brightnessTarget){
                                                 brightnessStep = max(1, (int)min(abs((float)brightnessTarget - (float)brightness), round(abs((float)brightnessTarget - (float)brightness) / ((float)intervalFreqHz * (float)jsonMsg["transition"]))));
@@ -432,7 +438,7 @@ public:
                                         state = false;
                                     brightnessStep = 0;
                                 }
-                                
+
                                 if(jsonMsg["brightness"] == 0)
                                     jsonState["state"] = "OFF";
                                 else if(!state){
@@ -463,7 +469,7 @@ public:
                                     // if way too low for kelvin, treat as mireds and convert to kelvin
                                     if(color_temp < 1000)
                                         color_temp = 1000000 / color_temp;
-                                        
+
                                     color_temp_step = 0;
                                 }
                                 jsonState["color_temp"] = jsonMsg["color_temp"];
@@ -642,7 +648,7 @@ public:
                                 jsonState["effect"] = effectToString(effect);
                             }
                             // end-if effects_supported
-                            
+
                             // --------------------------------------------------
 
                             // start-if color_temp_supported

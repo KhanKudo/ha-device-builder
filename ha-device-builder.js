@@ -42,7 +42,7 @@ const yaml = require('js-yaml')
  *             "sensor" |
  *             "switch"
  *      name: string
- *      unique_id: string
+ *      unique_id?: string
  *      retain?: boolean
  *      var_name?: string
  *      icon?: string
@@ -79,6 +79,7 @@ const yaml = require('js-yaml')
 /**
  * @typedef {{
  *      name: string
+ *      has_entity_name: true
  *      unique_id: string
  *      retain: boolean
  *      icon?: string
@@ -296,8 +297,10 @@ function processFeature(feature, jsonFeature) {
     if (pins.some(pin => pin in feature)) {
         defs.OUTPUT_HANDLE = ''
 
-        if (pins.some(pin => feature[pin]?.includes('\n')))
-            throw new Error('feature config has multiline pin definition, which couldn\'t possibly result in a valid pin')
+        if (pins.some(pin => pin in feature ? typeof feature[pin] === 'string' ? feature[pin].includes('\n') : typeof feature[pin] === 'number' ? !Number.isSafeInteger(feature[pin]) || feature[pin] < 0 : true : false))
+          throw new Error(`feature config has multiline or negative/decimal pin definition, which couldn't possibly result in a valid pin`)
+
+        const maxBrightness = Math.pow(2, feature.resolution ?? 8) - 1
 
         for (const pin of pins) {
             if (!(pin in feature))
@@ -306,10 +309,16 @@ function processFeature(feature, jsonFeature) {
             let defName = 'OUTPUT_PIN'
             if (pin !== 'pin')
                 defName += '_' + pin.at(-1)
-            defs[defName] = feature[pin]
-        }
 
-        const maxBrightness = Math.pow(2, feature.resolution ?? 8) - 1
+            if (typeof feature[pin] === 'string' && feature[pin].startsWith('^')) {
+                defs[defName] = feature[pin].slice(1)
+                defs[defName.replace('PIN', 'INVERT')] = maxBrightness
+            }
+            else {
+              defs[defName] = feature[pin]
+              defs[defName.replace('PIN', 'INVERT')] = 0
+            }
+        }
 
         if (feature.mode === 'onoff') {
             if (initials.some(init => init !== 'initial_state' && init in feature))
@@ -410,6 +419,9 @@ function processFeature(feature, jsonFeature) {
 device.features.forEach((feature, index) => {
     haMqttJsonFeatures[index] = {}
     const haMqtt = haMqttJsonFeatures[index]
+
+    haMqtt.has_entity_name = true
+    feature.unique_id ??= feature.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
 
     haMqtt['~'] = `${discoveryPrefix}/${feature.class}/${feature.unique_id}`
     haMqtt.name = feature.name
