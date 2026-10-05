@@ -529,7 +529,7 @@ if (fs.existsSync('src/main.cpp')) {
         changed = true
     }
 
-    if (!mainFile.includes('device.init();')) {
+    if (!mainFile.includes('device.init(')) {
         const startSetup = mainFile.indexOf('\n{', mainFile.indexOf('void setup()'))
         const endSetup = mainFile.indexOf('\n}', startSetup)
         mainFile = mainFile.slice(0, endSetup) + '\n    device.init();' + mainFile.slice(endSetup)
