@@ -74,6 +74,7 @@ private:
   };
 
   struct Automation {
+    String id;
     uint32_t state;
     String topic;
     String data;
@@ -97,7 +98,7 @@ private:
   std::vector<std::function<void(void)>> loopers;
 
   StaticJsonDocument<256> jsonMsg;
-  std::map<String, _HA_DEVICE::Automation> automations;
+  std::vector<_HA_DEVICE::Automation> automations;
   String automationTopic = "AUTOMATION_TOPIC";
 
   WiFiClient wifiClient;
@@ -238,22 +239,22 @@ private:
 
         String message = String((char *)payload, length);
 
-        // for (int i = 0; i < length; i++) {
-        //   message += (char)payload[i];
-        // }
-
-        if (topic == automationTopic + "/set") {
+        if (topic.startsWith(automationTopic + "/add")) {
           deserializeJson(jsonMsg, message);
-          automations.insert(std::pair<String, Automation>(
-              String(jsonMsg["id"]),
-              {(uint32_t)jsonMsg["state"], jsonMsg["topic"], jsonMsg["data"]}));
-          Serial.println(String("Set Automation: ") + String(jsonMsg["id"]) +
+          automations.push_back({jsonMsg["id"], (uint32_t)jsonMsg["state"],
+                                 jsonMsg["topic"], jsonMsg["data"]});
+          Serial.println(String("Added Automation: ") + String(jsonMsg["id"]) +
                          String(" | topic: ") + String(jsonMsg["topic"]) +
                          String(" | data: ") + String(jsonMsg["data"]));
           return;
-        } else if (topic == automationTopic + "/delete") {
-          automations.erase(message);
-          Serial.println(String("Removed Automation: ") + message);
+        } else if (topic == automationTopic + "/remove") {
+          automations.erase(std::remove_if(automations.begin(),
+                                           automations.end(),
+                                           [&message](auto &item) {
+                                             return item.id == message;
+                                           }),
+                            automations.end());
+          Serial.println(String("Removed Automations for id: ") + message);
           return;
         }
 
@@ -277,8 +278,9 @@ private:
     client.subscribe(otaServer.c_str());
 #endif
     client.subscribe((automationTopic + "/clear").c_str());
-    client.subscribe((automationTopic + "/set").c_str());
-    client.subscribe((automationTopic + "/delete").c_str());
+    client.subscribe((automationTopic + "/add").c_str());
+    client.subscribe((automationTopic + "/add/#").c_str());
+    client.subscribe((automationTopic + "/remove").c_str());
 
     for (auto it = listeners.cbegin(); it != listeners.cend(); it++) {
       client.subscribe(it->first.c_str());
@@ -515,18 +517,16 @@ public:
     if (automations.size() == 0)
       return;
 
-    for (auto it = automations.cbegin(); it != automations.cend(); ++it) {
+    for (auto it = automations.begin(); it != automations.end(); ++it) {
       yield();
-      if (id == it->first) {
+      if (id == it->id) {
         Serial.println(String("Found matching Automation: ") + id);
-        if (state == it->second.state) {
+        if (state == it->state) {
           Serial.println("  Triggered!");
-          client.publish(it->second.topic.c_str(), it->second.data.c_str(),
-                         false);
+          client.publish(it->topic.c_str(), it->data.c_str(), false);
         } else {
           Serial.println("  State not matched!");
         }
-        break;
       }
     }
   }
