@@ -198,6 +198,8 @@ outputHeader += components['manager']
   .replace(/DEVICE_ID_MD5_HASHED_HEXADECIMAL/g, deviceHash)
   // replace AVAILABILITY_TOPIC
   .replace(/AVAILABILITY_TOPIC/g, availabilityTopic ?? '')
+  // replace AUTOMATION_TOPIC
+  .replace(/AUTOMATION_TOPIC/g, `home/${toCodeName(device.name)}/automations`)
   // replace CODE_NAME
   .replace(/CODE_NAME/g, toCodeName(device.name))
   // replace DEVICE_ID

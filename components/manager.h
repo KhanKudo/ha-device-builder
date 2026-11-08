@@ -1,6 +1,7 @@
 #define OTA_UPDATE
 // start
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #ifdef OTA_UPDATE
 #include <ArduinoOTA.h>
 #endif
@@ -72,6 +73,12 @@ private:
     std::function<void(void)> func;
   };
 
+  struct Automation {
+    uint32_t state;
+    String topic;
+    String data;
+  };
+
   bool serverStatus = true;
 
   String name = "NAME";
@@ -88,6 +95,10 @@ private:
   std::map<uint32_t, std::function<void(void)>> timeouts;
   std::vector<_HA_DEVICE::Interval> intervals;
   std::vector<std::function<void(void)>> loopers;
+
+  StaticJsonDocument<256> jsonMsg;
+  std::map<String, _HA_DEVICE::Automation> automations;
+  String automationTopic = "AUTOMATION_TOPIC";
 
   WiFiClient wifiClient;
   WiFiClientSecure wifiClientSecure;
@@ -219,10 +230,31 @@ private:
         }
 #endif
 
-        String message = "";
+        if (topic == automationTopic + "/clear") {
+          automations.clear();
+          Serial.println("Cleared all automations!");
+          return;
+        }
 
-        for (int i = 0; i < length; i++) {
-          message += (char)payload[i];
+        String message = String((char *)payload, length);
+
+        // for (int i = 0; i < length; i++) {
+        //   message += (char)payload[i];
+        // }
+
+        if (topic == automationTopic + "/set") {
+          deserializeJson(jsonMsg, message);
+          automations.insert(std::pair<String, Automation>(
+              String(jsonMsg["id"]),
+              {(uint32_t)jsonMsg["state"], jsonMsg["topic"], jsonMsg["data"]}));
+          Serial.println(String("Set Automation: ") + String(jsonMsg["id"]) +
+                         String(" | topic: ") + String(jsonMsg["topic"]) +
+                         String(" | data: ") + String(jsonMsg["data"]));
+          return;
+        } else if (topic == automationTopic + "/delete") {
+          automations.erase(message);
+          Serial.println(String("Removed Automation: ") + message);
+          return;
         }
 
         listeners.at(topic)(message);
@@ -244,6 +276,9 @@ private:
 #ifdef OTA_UPDATE
     client.subscribe(otaServer.c_str());
 #endif
+    client.subscribe((automationTopic + "/clear").c_str());
+    client.subscribe((automationTopic + "/set").c_str());
+    client.subscribe((automationTopic + "/delete").c_str());
 
     for (auto it = listeners.cbegin(); it != listeners.cend(); it++) {
       client.subscribe(it->first.c_str());
@@ -280,6 +315,8 @@ public:
     _port = port;
     _user = user;
     _pass = pass;
+
+    Serial.begin(115200);
 
     _ha_device_init_features();
 
@@ -472,5 +509,25 @@ public:
   // add callback to be executed in the loop, at most every 1ms!
   void setLooper(std::function<void(void)> callback) {
     loopers.push_back(callback);
+  }
+
+  void checkAutomation(String id, uint32_t state) {
+    if (automations.size() == 0)
+      return;
+
+    for (auto it = automations.cbegin(); it != automations.cend(); ++it) {
+      yield();
+      if (id == it->first) {
+        Serial.println(String("Found matching Automation: ") + id);
+        if (state == it->second.state) {
+          Serial.println("  Triggered!");
+          client.publish(it->second.topic.c_str(), it->second.data.c_str(),
+                         false);
+        } else {
+          Serial.println("  State not matched!");
+        }
+        break;
+      }
+    }
   }
 } device;
