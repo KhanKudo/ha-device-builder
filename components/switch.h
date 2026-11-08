@@ -16,6 +16,12 @@ private:
 
   bool state = false;
 
+  void updateState(bool newState) {
+    state = newState;
+    device.publish(stateTopic.c_str(), newState ? "ON" : "OFF", retain);
+    listener(newState);
+  }
+
 public:
   void _init() {
     if (!retain) {
@@ -27,17 +33,13 @@ public:
       if (message != "ON" && message != "OFF")
         return;
 
-      state = message == "ON";
-      device.publish(stateTopic.c_str(), message.c_str(), retain);
-      listener(message == "ON");
+      updateState(message == "ON");
     });
   }
 
   bool getState() { return state; }
 
-  void setState(bool newState) {
-    device.publish(commandTopic.c_str(), newState ? "ON" : "OFF", retain);
-  }
+  void setState(bool newState) { updateState(newState); }
 
   // only one listener will work, newest overwrites previous
   void onChange(std::function<void(bool)> _listener) { listener = _listener; }

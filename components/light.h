@@ -13,17 +13,11 @@
 #define OUTPUT_MODE_ONOFF
 
 #define OUTPUT_PIN GPIO_NUM_8
-#define OUTPUT_INVERT 1
 #define OUTPUT_PIN_R GPIO_NUM_6
-#define OUTPUT_INVERT_R 255
 #define OUTPUT_PIN_G GPIO_NUM_7
-#define OUTPUT_INVERT_G 255
 #define OUTPUT_PIN_B GPIO_NUM_8
-#define OUTPUT_INVERT_B 255
 #define OUTPUT_PIN_W GPIO_NUM_9
-#define OUTPUT_INVERT_W 255
 #define OUTPUT_PIN_C GPIO_NUM_10
-#define OUTPUT_INVERT_C 255
 
 #define INITIAL_BRIGHTNESS 0
 #define INITIAL_TEMP 4000
@@ -162,6 +156,520 @@ private:
   std::function<void(bool)> state_listener = [](bool) {};
 #endif
   bool state = false;
+
+  void updateState() {
+    jsonState.clear();
+
+    // start-if effects_supported
+    if (jsonMsg.containsKey("effect") && !jsonMsg.containsKey("state"))
+      return;
+    // end-if effects_supported
+
+    if (jsonMsg.containsKey("retain-recovery") &&
+        jsonMsg["retain-recovery"] == true) {
+      if (initialSetup)
+        initialSetup = false;
+      else
+        return;
+    }
+
+    if (jsonMsg.containsKey("state")) {
+      if (jsonMsg["state"] != "ON" && jsonMsg["state"] != "OFF")
+        return;
+
+      bool newState = jsonMsg["state"] == "ON";
+      if (state != newState) {
+        state = newState;
+
+        // start-if brightness_supported
+        if (!newState || jsonRetainedCommand.containsKey("brightness")) {
+          if (jsonMsg.containsKey("transition")) {
+            if (!newState && brightness != 0)
+              state = true;
+
+            brightnessTarget = newState ? jsonRetainedCommand["brightness"] : 0;
+            if (brightness != brightnessTarget) {
+              brightnessStep = max(
+                  1, (int)min(abs((float)brightnessTarget - (float)brightness),
+                              round(abs((float)brightnessTarget -
+                                        (float)brightness) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+              brightnessDeltaMs =
+                  round((1000.0f * (float)jsonMsg["transition"] *
+                         (float)brightnessStep) /
+                        abs((float)brightnessTarget - (float)brightness));
+              brightnessNextMillis = millis() + brightnessDeltaMs;
+            }
+            jsonState["brightness"] = brightnessTarget;
+          } else {
+            brightness = newState ? jsonRetainedCommand["brightness"] : 0;
+            jsonState["brightness"] = brightness;
+          }
+        }
+        // end-if brightness_supported
+      }
+      jsonState["state"] = jsonMsg["state"];
+    }
+
+    // start-if brightness_supported
+    if (jsonMsg.containsKey("brightness")) {
+      if (jsonMsg.containsKey("transition")) {
+        brightnessTarget = jsonMsg["brightness"];
+        if (brightness != brightnessTarget) {
+          brightnessStep = max(
+              1,
+              (int)min(abs((float)brightnessTarget - (float)brightness),
+                       round(abs((float)brightnessTarget - (float)brightness) /
+                             ((float)intervalFreqHz *
+                              (float)jsonMsg["transition"]))));
+          brightnessDeltaMs = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)brightnessStep) /
+              abs((float)brightnessTarget - (float)brightness));
+          brightnessNextMillis = millis() + brightnessDeltaMs;
+        } else if (brightness == 0) {
+          state = false;
+        }
+      } else {
+        brightness = jsonMsg["brightness"];
+        if (brightness == 0)
+          state = false;
+        brightnessStep = 0;
+      }
+
+      if (jsonMsg["brightness"] == 0)
+        jsonState["state"] = "OFF";
+      else if (!state) {
+        state = true;
+        jsonState["state"] = "ON";
+      }
+      jsonState["brightness"] = jsonMsg["brightness"];
+    }
+    // end-if brightness_supported
+
+    // start-if color_temp_supported
+    if (jsonMsg.containsKey("color_temp")) {
+      if (jsonMsg.containsKey("transition")) {
+        color_temp_target = jsonMsg["color_temp"];
+
+        // if way too low for kelvin, treat as mireds and convert to kelvin
+        if (color_temp_target < 1000)
+          color_temp_target = 1000000 / color_temp_target;
+
+        if (color_temp != color_temp_target) {
+          color_temp_step = max(
+              1,
+              (int)min(abs((float)color_temp_target - (float)color_temp),
+                       round(abs((float)color_temp_target - (float)color_temp) /
+                             ((float)intervalFreqHz *
+                              (float)jsonMsg["transition"]))));
+          color_temp_delta_ms =
+              round((1000.0f * (float)jsonMsg["transition"] *
+                     (float)color_temp_step) /
+                    abs((float)color_temp_target - (float)color_temp));
+          color_temp_next_millis = millis() + color_temp_delta_ms;
+        }
+      } else {
+        color_temp = jsonMsg["color_temp"];
+        // if way too low for kelvin, treat as mireds and convert to kelvin
+        if (color_temp < 1000)
+          color_temp = 1000000 / color_temp;
+
+        color_temp_step = 0;
+      }
+      jsonState["color_temp"] = jsonMsg["color_temp"];
+      jsonState["color_mode"] = "color_temp";
+    }
+    // end-if color_temp_supported
+
+    // start-if rgb_supported
+    if (jsonMsg.containsKey("color")) {
+      if (jsonMsg.containsKey("transition")) {
+        rgbTarget.r = jsonMsg["color"]["r"];
+        if (rgb.r != rgbTarget.r) {
+          rgbStep.r =
+              max(1, (int)min(abs((float)rgbTarget.r - (float)rgb.r),
+                              round(abs((float)rgbTarget.r - (float)rgb.r) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbDeltaMs.r = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbStep.r) /
+              abs((float)rgbTarget.r - (float)rgb.r));
+          rgbNextMillis.r = millis() + rgbDeltaMs.r;
+        }
+        rgbTarget.g = jsonMsg["color"]["g"];
+        if (rgb.g != rgbTarget.g) {
+          rgbStep.g =
+              max(1, (int)min(abs((float)rgbTarget.g - (float)rgb.g),
+                              round(abs((float)rgbTarget.g - (float)rgb.g) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbDeltaMs.g = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbStep.g) /
+              abs((float)rgbTarget.g - (float)rgb.g));
+          rgbNextMillis.g = millis() + rgbDeltaMs.g;
+        }
+        rgbTarget.b = jsonMsg["color"]["b"];
+        if (rgb.b != rgbTarget.b) {
+          rgbStep.b =
+              max(1, (int)min(abs((float)rgbTarget.b - (float)rgb.b),
+                              round(abs((float)rgbTarget.b - (float)rgb.b) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbDeltaMs.b = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbStep.b) /
+              abs((float)rgbTarget.b - (float)rgb.b));
+          rgbNextMillis.b = millis() + rgbDeltaMs.b;
+        }
+      } else {
+        rgb = {jsonMsg["color"]["r"], jsonMsg["color"]["g"],
+               jsonMsg["color"]["b"]};
+        rgbStep = {0, 0, 0};
+      }
+      jsonState["color"] = jsonMsg["color"];
+      jsonState["color_mode"] = "rgb";
+    }
+    // end-if rgb_supported
+
+    // start-if rgbw_supported
+    if (jsonMsg.containsKey("color")) {
+      if (jsonMsg.containsKey("transition")) {
+        rgbwTarget.r = jsonMsg["color"]["r"];
+        if (rgbw.r != rgbwTarget.r) {
+          rgbwStep.r =
+              max(1, (int)min(abs((float)rgbwTarget.r - (float)rgbw.r),
+                              round(abs((float)rgbwTarget.r - (float)rgbw.r) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbwDeltaMs.r = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.r) /
+              abs((float)rgbwTarget.r - (float)rgbw.r));
+          rgbwNextMillis.r = millis() + rgbwDeltaMs.r;
+        }
+        rgbwTarget.g = jsonMsg["color"]["g"];
+        if (rgbw.g != rgbwTarget.g) {
+          rgbwStep.g =
+              max(1, (int)min(abs((float)rgbwTarget.g - (float)rgbw.g),
+                              round(abs((float)rgbwTarget.g - (float)rgbw.g) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbwDeltaMs.g = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.g) /
+              abs((float)rgbwTarget.g - (float)rgbw.g));
+          rgbwNextMillis.g = millis() + rgbwDeltaMs.g;
+        }
+        rgbwTarget.b = jsonMsg["color"]["b"];
+        if (rgbw.b != rgbwTarget.b) {
+          rgbwStep.b =
+              max(1, (int)min(abs((float)rgbwTarget.b - (float)rgbw.b),
+                              round(abs((float)rgbwTarget.b - (float)rgbw.b) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbwDeltaMs.b = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.b) /
+              abs((float)rgbwTarget.b - (float)rgbw.b));
+          rgbwNextMillis.b = millis() + rgbwDeltaMs.b;
+        }
+        rgbwTarget.w = jsonMsg["color"]["w"];
+        if (rgbw.w != rgbwTarget.w) {
+          rgbwStep.w =
+              max(1, (int)min(abs((float)rgbwTarget.w - (float)rgbw.w),
+                              round(abs((float)rgbwTarget.w - (float)rgbw.w) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbwDeltaMs.w = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.w) /
+              abs((float)rgbwTarget.w - (float)rgbw.w));
+          rgbwNextMillis.w = millis() + rgbwDeltaMs.w;
+        }
+      } else {
+        rgbw = {jsonMsg["color"]["r"], jsonMsg["color"]["g"],
+                jsonMsg["color"]["b"], jsonMsg["color"]["w"]};
+        rgbwStep = {0, 0, 0, 0};
+      }
+      jsonState["color"] = jsonMsg["color"];
+      jsonState["color_mode"] = "rgbw";
+    }
+    // end-if rgbw_supported
+
+    // start-if rgbww_supported
+    if (jsonMsg.containsKey("color")) {
+      if (jsonMsg.containsKey("transition")) {
+        rgbwwTarget.r = jsonMsg["color"]["r"];
+        if (rgbww.r != rgbwwTarget.r) {
+          rgbwwStep.r =
+              max(1, (int)min(abs((float)rgbwwTarget.r - (float)rgbww.r),
+                              round(abs((float)rgbwwTarget.r - (float)rgbww.r) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbwwDeltaMs.r = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.r) /
+              abs((float)rgbwwTarget.r - (float)rgbww.r));
+          rgbwwNextMillis.r = millis() + rgbwwDeltaMs.r;
+        }
+        rgbwwTarget.g = jsonMsg["color"]["g"];
+        if (rgbww.g != rgbwwTarget.g) {
+          rgbwwStep.g =
+              max(1, (int)min(abs((float)rgbwwTarget.g - (float)rgbww.g),
+                              round(abs((float)rgbwwTarget.g - (float)rgbww.g) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbwwDeltaMs.g = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.g) /
+              abs((float)rgbwwTarget.g - (float)rgbww.g));
+          rgbwwNextMillis.g = millis() + rgbwwDeltaMs.g;
+        }
+        rgbwwTarget.b = jsonMsg["color"]["b"];
+        if (rgbww.b != rgbwwTarget.b) {
+          rgbwwStep.b =
+              max(1, (int)min(abs((float)rgbwwTarget.b - (float)rgbww.b),
+                              round(abs((float)rgbwwTarget.b - (float)rgbww.b) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbwwDeltaMs.b = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.b) /
+              abs((float)rgbwwTarget.b - (float)rgbww.b));
+          rgbwwNextMillis.b = millis() + rgbwwDeltaMs.b;
+        }
+        rgbwwTarget.c = jsonMsg["color"]["c"];
+        if (rgbww.c != rgbwwTarget.c) {
+          rgbwwStep.c =
+              max(1, (int)min(abs((float)rgbwwTarget.c - (float)rgbww.c),
+                              round(abs((float)rgbwwTarget.c - (float)rgbww.c) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbwwDeltaMs.c = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.c) /
+              abs((float)rgbwwTarget.c - (float)rgbww.c));
+          rgbwwNextMillis.c = millis() + rgbwwDeltaMs.c;
+        }
+        rgbwwTarget.w = jsonMsg["color"]["w"];
+        if (rgbww.w != rgbwwTarget.w) {
+          rgbwwStep.w =
+              max(1, (int)min(abs((float)rgbwwTarget.w - (float)rgbww.w),
+                              round(abs((float)rgbwwTarget.w - (float)rgbww.w) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          rgbwwDeltaMs.w = round(
+              (1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.w) /
+              abs((float)rgbwwTarget.w - (float)rgbww.w));
+          rgbwwNextMillis.w = millis() + rgbwwDeltaMs.w;
+        }
+      } else {
+        rgbww = {jsonMsg["color"]["r"], jsonMsg["color"]["g"],
+                 jsonMsg["color"]["b"], jsonMsg["color"]["c"],
+                 jsonMsg["color"]["w"]};
+        rgbwwStep = {0, 0, 0, 0, 0};
+      }
+      jsonState["color"] = jsonMsg["color"];
+      jsonState["color_mode"] = "rgbww";
+    }
+    // end-if rgbww_supported
+
+    // start-if hs_supported
+    if (jsonMsg.containsKey("color")) {
+      if (jsonMsg.containsKey("transition")) {
+        hsTarget.h = jsonMsg["color"]["h"];
+        if (hs.h != hsTarget.h) {
+          hsStep.h =
+              max(1, (int)min(abs((float)hsTarget.h - (float)hs.h),
+                              round(abs((float)hsTarget.h - (float)hs.h) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          hsDeltaMs.h =
+              round((1000.0f * (float)jsonMsg["transition"] * (float)hsStep.h) /
+                    abs((float)hsTarget.h - (float)hs.h));
+          hsNextMillis.h = millis() + hsDeltaMs.h;
+        }
+        hsTarget.s = jsonMsg["color"]["s"];
+        if (hs.s != hsTarget.s) {
+          hsStep.s =
+              max(1, (int)min(abs((float)hsTarget.s - (float)hs.s),
+                              round(abs((float)hsTarget.s - (float)hs.s) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          hsDeltaMs.s =
+              round((1000.0f * (float)jsonMsg["transition"] * (float)hsStep.s) /
+                    abs((float)hsTarget.s - (float)hs.s));
+          hsNextMillis.s = millis() + hsDeltaMs.s;
+        }
+      } else {
+        hs = {jsonMsg["color"]["h"], jsonMsg["color"]["s"]};
+        hsStep = {0, 0};
+      }
+      jsonState["color"] = jsonMsg["color"];
+      jsonState["color_mode"] = "hs";
+    }
+    // end-if hs_supported
+
+    // start-if xy_supported
+    if (jsonMsg.containsKey("color")) {
+      if (jsonMsg.containsKey("transition")) {
+        xyTarget.x = jsonMsg["color"]["x"];
+        if (xy.x != xyTarget.x) {
+          xyStep.x =
+              max(1, (int)min(abs((float)xyTarget.x - (float)xy.x),
+                              round(abs((float)xyTarget.x - (float)xy.x) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          xyDeltaMs.x =
+              round((1000.0f * (float)jsonMsg["transition"] * (float)xyStep.x) /
+                    abs((float)xyTarget.x - (float)xy.x));
+          xyNextMillis.x = millis() + xyDeltaMs.x;
+        }
+        xyTarget.y = jsonMsg["color"]["y"];
+        if (xy.y != xyTarget.y) {
+          xyStep.y =
+              max(1, (int)min(abs((float)xyTarget.y - (float)xy.y),
+                              round(abs((float)xyTarget.y - (float)xy.y) /
+                                    ((float)intervalFreqHz *
+                                     (float)jsonMsg["transition"]))));
+          xyDeltaMs.y =
+              round((1000.0f * (float)jsonMsg["transition"] * (float)xyStep.y) /
+                    abs((float)xyTarget.y - (float)xy.y));
+          xyNextMillis.y = millis() + xyDeltaMs.y;
+        }
+      } else {
+        xy = {jsonMsg["color"]["x"], jsonMsg["color"]["y"]};
+        xyStep = {0, 0};
+      }
+      jsonState["color"] = jsonMsg["color"];
+      jsonState["color_mode"] = "xy";
+    }
+    // end-if xy_supported
+
+    // start-if effects_supported
+    if (jsonMsg.containsKey("effect")) {
+      effect = stringToEffect(jsonMsg["effect"]);
+      jsonState["effect"] = jsonMsg["effect"];
+    } else if (jsonMsg.containsKey("color") && effect != 0) {
+      effect = (Effect)0; // assumed to be 'none'
+      jsonState["effect"] = effectToString(effect);
+    }
+    // end-if effects_supported
+
+    // --------------------------------------------------
+
+    // start-if color_temp_supported
+    if (jsonState.containsKey("color_temp") &&
+        !jsonMsg.containsKey("transition")) {
+      color_temp_listener(color_temp);
+    }
+    // end-if color_temp_supported
+
+    // start-if rgb_supported
+    if (jsonState.containsKey("color") && !jsonMsg.containsKey("transition")) {
+      rgb_listener(rgb);
+    }
+    // end-if rgb_supported
+
+    // start-if rgbw_supported
+    if (jsonState.containsKey("color") && !jsonMsg.containsKey("transition")) {
+      rgbw_listener(rgbw);
+    }
+    // end-if rgbw_supported
+
+    // start-if rgbww_supported
+    if (jsonState.containsKey("color") && !jsonMsg.containsKey("transition")) {
+      rgbww_listener(rgbww);
+    }
+    // end-if rgbww_supported
+
+    // start-if hs_supported
+    if (jsonState.containsKey("color") && !jsonMsg.containsKey("transition")) {
+      hs_listener(hs);
+    }
+    // end-if hs_supported
+
+    // start-if xy_supported
+    if (jsonState.containsKey("color") && !jsonMsg.containsKey("transition")) {
+      xy_listener(xy);
+    }
+    // end-if xy_supported
+
+    // start-if effects_supported
+    if (jsonState.containsKey("effect")) {
+      effect_listener(effect);
+    }
+    // end-if effects_supported
+
+    // start-if brightness_supported
+    if (jsonState.containsKey("brightness") &&
+        !jsonMsg.containsKey("transition")) {
+      brightness_listener(brightness);
+    }
+    // end-if brightness_supported
+
+#if defined(OUTPUT_MODE_ONOFF) || !defined(OUTPUT_HANDLE)
+    if (jsonState.containsKey("state")) {
+      state_listener(state);
+    }
+#endif
+
+    char responseMsg[256];
+    serializeJson(jsonState, responseMsg, 256);
+    device.publish(stateTopic.c_str(), responseMsg, retain);
+
+    if (retain) {
+      if (jsonMsg.containsKey("state"))
+        jsonRetainedCommand["state"] = jsonMsg["state"];
+      // start-if brightness_supported
+      if (jsonMsg.containsKey("brightness"))
+        jsonRetainedCommand["brightness"] = jsonMsg["brightness"];
+      // end-if brightness_supported
+      // start-if color_temp_supported
+      if (jsonMsg.containsKey("color_temp"))
+        jsonRetainedCommand["color_temp"] = jsonMsg["color_temp"];
+      // end-if color_temp_supported
+      // start-if rgb_supported
+      if (jsonMsg.containsKey("color"))
+        jsonRetainedCommand["color"]["r"] = jsonMsg["color"]["r"];
+      jsonRetainedCommand["color"]["g"] = jsonMsg["color"]["g"];
+      jsonRetainedCommand["color"]["b"] = jsonMsg["color"]["b"];
+      // end-if rgb_supported
+      // start-if rgbw_supported
+      if (jsonMsg.containsKey("color"))
+        jsonRetainedCommand["color"]["r"] = jsonMsg["color"]["r"];
+      jsonRetainedCommand["color"]["g"] = jsonMsg["color"]["g"];
+      jsonRetainedCommand["color"]["b"] = jsonMsg["color"]["b"];
+      jsonRetainedCommand["color"]["w"] = jsonMsg["color"]["w"];
+      // end-if rgbw_supported
+      // start-if rgbww_supported
+      if (jsonMsg.containsKey("color"))
+        jsonRetainedCommand["color"]["r"] = jsonMsg["color"]["r"];
+      jsonRetainedCommand["color"]["g"] = jsonMsg["color"]["g"];
+      jsonRetainedCommand["color"]["b"] = jsonMsg["color"]["b"];
+      jsonRetainedCommand["color"]["c"] = jsonMsg["color"]["c"];
+      jsonRetainedCommand["color"]["w"] = jsonMsg["color"]["w"];
+      // end-if rgbww_supported
+      // start-if hs_supported
+      if (jsonMsg.containsKey("color"))
+        jsonRetainedCommand["color"]["h"] = jsonMsg["color"]["h"];
+      jsonRetainedCommand["color"]["s"] = jsonMsg["color"]["s"];
+      // end-if hs_supported
+      // start-if xy_supported
+      if (jsonMsg.containsKey("color"))
+        jsonRetainedCommand["color"]["x"] = jsonMsg["color"]["x"];
+      jsonRetainedCommand["color"]["y"] = jsonMsg["color"]["y"];
+      // end-if xy_supported
+      // start-if effects_supported
+      if (jsonMsg.containsKey("effect"))
+        jsonRetainedCommand["effect"] = effectToString(effect);
+      // end-if effects_supported
+
+      jsonRetainedCommand["retain-recovery"] = true;
+      serializeJson(jsonRetainedCommand, responseMsg, 256);
+      device.publish(commandTopic.c_str(), responseMsg, true);
+    }
+
+    if (jsonMsg.containsKey("flash")) {
+      device.setTimeout(((uint32_t)jsonMsg["flash"]) * 1000, [this]() {
+        jsonMsg.clear();
+        jsonMsg["state"] = "OFF";
+        updateState();
+      });
+    }
+  }
 
   // start-if brightness_supported
   UINT_RESOLUTION_T brightnessTarget = 0;
@@ -360,524 +868,7 @@ public:
 
     device.subscribe(commandTopic.c_str(), [this](String message) {
       deserializeJson(jsonMsg, message);
-
-      jsonState.clear();
-
-      // start-if effects_supported
-      if (jsonMsg.containsKey("effect") && !jsonMsg.containsKey("state"))
-        return;
-      // end-if effects_supported
-
-      if (jsonMsg.containsKey("retain-recovery") &&
-          jsonMsg["retain-recovery"] == true) {
-        if (initialSetup)
-          initialSetup = false;
-        else
-          return;
-      }
-
-      if (jsonMsg.containsKey("state")) {
-        if (jsonMsg["state"] != "ON" && jsonMsg["state"] != "OFF")
-          return;
-
-        bool newState = jsonMsg["state"] == "ON";
-        if (state != newState) {
-          state = newState;
-
-          // start-if brightness_supported
-          if (!newState || jsonRetainedCommand.containsKey("brightness")) {
-            if (jsonMsg.containsKey("transition")) {
-              if (!newState && brightness != 0)
-                state = true;
-
-              brightnessTarget =
-                  newState ? jsonRetainedCommand["brightness"] : 0;
-              if (brightness != brightnessTarget) {
-                brightnessStep = max(
-                    1,
-                    (int)min(
-                        abs((float)brightnessTarget - (float)brightness),
-                        round(abs((float)brightnessTarget - (float)brightness) /
-                              ((float)intervalFreqHz *
-                               (float)jsonMsg["transition"]))));
-                brightnessDeltaMs =
-                    round((1000.0f * (float)jsonMsg["transition"] *
-                           (float)brightnessStep) /
-                          abs((float)brightnessTarget - (float)brightness));
-                brightnessNextMillis = millis() + brightnessDeltaMs;
-              }
-              jsonState["brightness"] = brightnessTarget;
-            } else {
-              brightness = newState ? jsonRetainedCommand["brightness"] : 0;
-              jsonState["brightness"] = brightness;
-            }
-          }
-          // end-if brightness_supported
-        }
-        jsonState["state"] = jsonMsg["state"];
-      }
-
-      // start-if brightness_supported
-      if (jsonMsg.containsKey("brightness")) {
-        if (jsonMsg.containsKey("transition")) {
-          brightnessTarget = jsonMsg["brightness"];
-          if (brightness != brightnessTarget) {
-            brightnessStep = max(
-                1, (int)min(
-                       abs((float)brightnessTarget - (float)brightness),
-                       round(abs((float)brightnessTarget - (float)brightness) /
-                             ((float)intervalFreqHz *
-                              (float)jsonMsg["transition"]))));
-            brightnessDeltaMs =
-                round((1000.0f * (float)jsonMsg["transition"] *
-                       (float)brightnessStep) /
-                      abs((float)brightnessTarget - (float)brightness));
-            brightnessNextMillis = millis() + brightnessDeltaMs;
-          } else if (brightness == 0) {
-            state = false;
-          }
-        } else {
-          brightness = jsonMsg["brightness"];
-          if (brightness == 0)
-            state = false;
-          brightnessStep = 0;
-        }
-
-        if (jsonMsg["brightness"] == 0)
-          jsonState["state"] = "OFF";
-        else if (!state) {
-          state = true;
-          jsonState["state"] = "ON";
-        }
-        jsonState["brightness"] = jsonMsg["brightness"];
-      }
-      // end-if brightness_supported
-
-      // start-if color_temp_supported
-      if (jsonMsg.containsKey("color_temp")) {
-        if (jsonMsg.containsKey("transition")) {
-          color_temp_target = jsonMsg["color_temp"];
-
-          // if way too low for kelvin, treat as mireds and convert to kelvin
-          if (color_temp_target < 1000)
-            color_temp_target = 1000000 / color_temp_target;
-
-          if (color_temp != color_temp_target) {
-            color_temp_step = max(
-                1, (int)min(
-                       abs((float)color_temp_target - (float)color_temp),
-                       round(abs((float)color_temp_target - (float)color_temp) /
-                             ((float)intervalFreqHz *
-                              (float)jsonMsg["transition"]))));
-            color_temp_delta_ms =
-                round((1000.0f * (float)jsonMsg["transition"] *
-                       (float)color_temp_step) /
-                      abs((float)color_temp_target - (float)color_temp));
-            color_temp_next_millis = millis() + color_temp_delta_ms;
-          }
-        } else {
-          color_temp = jsonMsg["color_temp"];
-          // if way too low for kelvin, treat as mireds and convert to kelvin
-          if (color_temp < 1000)
-            color_temp = 1000000 / color_temp;
-
-          color_temp_step = 0;
-        }
-        jsonState["color_temp"] = jsonMsg["color_temp"];
-        jsonState["color_mode"] = "color_temp";
-      }
-      // end-if color_temp_supported
-
-      // start-if rgb_supported
-      if (jsonMsg.containsKey("color")) {
-        if (jsonMsg.containsKey("transition")) {
-          rgbTarget.r = jsonMsg["color"]["r"];
-          if (rgb.r != rgbTarget.r) {
-            rgbStep.r =
-                max(1, (int)min(abs((float)rgbTarget.r - (float)rgb.r),
-                                round(abs((float)rgbTarget.r - (float)rgb.r) /
-                                      ((float)intervalFreqHz *
-                                       (float)jsonMsg["transition"]))));
-            rgbDeltaMs.r = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbStep.r) /
-                abs((float)rgbTarget.r - (float)rgb.r));
-            rgbNextMillis.r = millis() + rgbDeltaMs.r;
-          }
-          rgbTarget.g = jsonMsg["color"]["g"];
-          if (rgb.g != rgbTarget.g) {
-            rgbStep.g =
-                max(1, (int)min(abs((float)rgbTarget.g - (float)rgb.g),
-                                round(abs((float)rgbTarget.g - (float)rgb.g) /
-                                      ((float)intervalFreqHz *
-                                       (float)jsonMsg["transition"]))));
-            rgbDeltaMs.g = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbStep.g) /
-                abs((float)rgbTarget.g - (float)rgb.g));
-            rgbNextMillis.g = millis() + rgbDeltaMs.g;
-          }
-          rgbTarget.b = jsonMsg["color"]["b"];
-          if (rgb.b != rgbTarget.b) {
-            rgbStep.b =
-                max(1, (int)min(abs((float)rgbTarget.b - (float)rgb.b),
-                                round(abs((float)rgbTarget.b - (float)rgb.b) /
-                                      ((float)intervalFreqHz *
-                                       (float)jsonMsg["transition"]))));
-            rgbDeltaMs.b = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbStep.b) /
-                abs((float)rgbTarget.b - (float)rgb.b));
-            rgbNextMillis.b = millis() + rgbDeltaMs.b;
-          }
-        } else {
-          rgb = {jsonMsg["color"]["r"], jsonMsg["color"]["g"],
-                 jsonMsg["color"]["b"]};
-          rgbStep = {0, 0, 0};
-        }
-        jsonState["color"] = jsonMsg["color"];
-        jsonState["color_mode"] = "rgb";
-      }
-      // end-if rgb_supported
-
-      // start-if rgbw_supported
-      if (jsonMsg.containsKey("color")) {
-        if (jsonMsg.containsKey("transition")) {
-          rgbwTarget.r = jsonMsg["color"]["r"];
-          if (rgbw.r != rgbwTarget.r) {
-            rgbwStep.r =
-                max(1, (int)min(abs((float)rgbwTarget.r - (float)rgbw.r),
-                                round(abs((float)rgbwTarget.r - (float)rgbw.r) /
-                                      ((float)intervalFreqHz *
-                                       (float)jsonMsg["transition"]))));
-            rgbwDeltaMs.r = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.r) /
-                abs((float)rgbwTarget.r - (float)rgbw.r));
-            rgbwNextMillis.r = millis() + rgbwDeltaMs.r;
-          }
-          rgbwTarget.g = jsonMsg["color"]["g"];
-          if (rgbw.g != rgbwTarget.g) {
-            rgbwStep.g =
-                max(1, (int)min(abs((float)rgbwTarget.g - (float)rgbw.g),
-                                round(abs((float)rgbwTarget.g - (float)rgbw.g) /
-                                      ((float)intervalFreqHz *
-                                       (float)jsonMsg["transition"]))));
-            rgbwDeltaMs.g = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.g) /
-                abs((float)rgbwTarget.g - (float)rgbw.g));
-            rgbwNextMillis.g = millis() + rgbwDeltaMs.g;
-          }
-          rgbwTarget.b = jsonMsg["color"]["b"];
-          if (rgbw.b != rgbwTarget.b) {
-            rgbwStep.b =
-                max(1, (int)min(abs((float)rgbwTarget.b - (float)rgbw.b),
-                                round(abs((float)rgbwTarget.b - (float)rgbw.b) /
-                                      ((float)intervalFreqHz *
-                                       (float)jsonMsg["transition"]))));
-            rgbwDeltaMs.b = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.b) /
-                abs((float)rgbwTarget.b - (float)rgbw.b));
-            rgbwNextMillis.b = millis() + rgbwDeltaMs.b;
-          }
-          rgbwTarget.w = jsonMsg["color"]["w"];
-          if (rgbw.w != rgbwTarget.w) {
-            rgbwStep.w =
-                max(1, (int)min(abs((float)rgbwTarget.w - (float)rgbw.w),
-                                round(abs((float)rgbwTarget.w - (float)rgbw.w) /
-                                      ((float)intervalFreqHz *
-                                       (float)jsonMsg["transition"]))));
-            rgbwDeltaMs.w = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbwStep.w) /
-                abs((float)rgbwTarget.w - (float)rgbw.w));
-            rgbwNextMillis.w = millis() + rgbwDeltaMs.w;
-          }
-        } else {
-          rgbw = {jsonMsg["color"]["r"], jsonMsg["color"]["g"],
-                  jsonMsg["color"]["b"], jsonMsg["color"]["w"]};
-          rgbwStep = {0, 0, 0, 0};
-        }
-        jsonState["color"] = jsonMsg["color"];
-        jsonState["color_mode"] = "rgbw";
-      }
-      // end-if rgbw_supported
-
-      // start-if rgbww_supported
-      if (jsonMsg.containsKey("color")) {
-        if (jsonMsg.containsKey("transition")) {
-          rgbwwTarget.r = jsonMsg["color"]["r"];
-          if (rgbww.r != rgbwwTarget.r) {
-            rgbwwStep.r = max(
-                1, (int)min(abs((float)rgbwwTarget.r - (float)rgbww.r),
-                            round(abs((float)rgbwwTarget.r - (float)rgbww.r) /
-                                  ((float)intervalFreqHz *
-                                   (float)jsonMsg["transition"]))));
-            rgbwwDeltaMs.r = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.r) /
-                abs((float)rgbwwTarget.r - (float)rgbww.r));
-            rgbwwNextMillis.r = millis() + rgbwwDeltaMs.r;
-          }
-          rgbwwTarget.g = jsonMsg["color"]["g"];
-          if (rgbww.g != rgbwwTarget.g) {
-            rgbwwStep.g = max(
-                1, (int)min(abs((float)rgbwwTarget.g - (float)rgbww.g),
-                            round(abs((float)rgbwwTarget.g - (float)rgbww.g) /
-                                  ((float)intervalFreqHz *
-                                   (float)jsonMsg["transition"]))));
-            rgbwwDeltaMs.g = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.g) /
-                abs((float)rgbwwTarget.g - (float)rgbww.g));
-            rgbwwNextMillis.g = millis() + rgbwwDeltaMs.g;
-          }
-          rgbwwTarget.b = jsonMsg["color"]["b"];
-          if (rgbww.b != rgbwwTarget.b) {
-            rgbwwStep.b = max(
-                1, (int)min(abs((float)rgbwwTarget.b - (float)rgbww.b),
-                            round(abs((float)rgbwwTarget.b - (float)rgbww.b) /
-                                  ((float)intervalFreqHz *
-                                   (float)jsonMsg["transition"]))));
-            rgbwwDeltaMs.b = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.b) /
-                abs((float)rgbwwTarget.b - (float)rgbww.b));
-            rgbwwNextMillis.b = millis() + rgbwwDeltaMs.b;
-          }
-          rgbwwTarget.c = jsonMsg["color"]["c"];
-          if (rgbww.c != rgbwwTarget.c) {
-            rgbwwStep.c = max(
-                1, (int)min(abs((float)rgbwwTarget.c - (float)rgbww.c),
-                            round(abs((float)rgbwwTarget.c - (float)rgbww.c) /
-                                  ((float)intervalFreqHz *
-                                   (float)jsonMsg["transition"]))));
-            rgbwwDeltaMs.c = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.c) /
-                abs((float)rgbwwTarget.c - (float)rgbww.c));
-            rgbwwNextMillis.c = millis() + rgbwwDeltaMs.c;
-          }
-          rgbwwTarget.w = jsonMsg["color"]["w"];
-          if (rgbww.w != rgbwwTarget.w) {
-            rgbwwStep.w = max(
-                1, (int)min(abs((float)rgbwwTarget.w - (float)rgbww.w),
-                            round(abs((float)rgbwwTarget.w - (float)rgbww.w) /
-                                  ((float)intervalFreqHz *
-                                   (float)jsonMsg["transition"]))));
-            rgbwwDeltaMs.w = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)rgbwwStep.w) /
-                abs((float)rgbwwTarget.w - (float)rgbww.w));
-            rgbwwNextMillis.w = millis() + rgbwwDeltaMs.w;
-          }
-        } else {
-          rgbww = {jsonMsg["color"]["r"], jsonMsg["color"]["g"],
-                   jsonMsg["color"]["b"], jsonMsg["color"]["c"],
-                   jsonMsg["color"]["w"]};
-          rgbwwStep = {0, 0, 0, 0, 0};
-        }
-        jsonState["color"] = jsonMsg["color"];
-        jsonState["color_mode"] = "rgbww";
-      }
-      // end-if rgbww_supported
-
-      // start-if hs_supported
-      if (jsonMsg.containsKey("color")) {
-        if (jsonMsg.containsKey("transition")) {
-          hsTarget.h = jsonMsg["color"]["h"];
-          if (hs.h != hsTarget.h) {
-            hsStep.h =
-                max(1, (int)min(abs((float)hsTarget.h - (float)hs.h),
-                                round(abs((float)hsTarget.h - (float)hs.h) /
-                                      ((float)intervalFreqHz *
-                                       (float)jsonMsg["transition"]))));
-            hsDeltaMs.h = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)hsStep.h) /
-                abs((float)hsTarget.h - (float)hs.h));
-            hsNextMillis.h = millis() + hsDeltaMs.h;
-          }
-          hsTarget.s = jsonMsg["color"]["s"];
-          if (hs.s != hsTarget.s) {
-            hsStep.s =
-                max(1, (int)min(abs((float)hsTarget.s - (float)hs.s),
-                                round(abs((float)hsTarget.s - (float)hs.s) /
-                                      ((float)intervalFreqHz *
-                                       (float)jsonMsg["transition"]))));
-            hsDeltaMs.s = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)hsStep.s) /
-                abs((float)hsTarget.s - (float)hs.s));
-            hsNextMillis.s = millis() + hsDeltaMs.s;
-          }
-        } else {
-          hs = {jsonMsg["color"]["h"], jsonMsg["color"]["s"]};
-          hsStep = {0, 0};
-        }
-        jsonState["color"] = jsonMsg["color"];
-        jsonState["color_mode"] = "hs";
-      }
-      // end-if hs_supported
-
-      // start-if xy_supported
-      if (jsonMsg.containsKey("color")) {
-        if (jsonMsg.containsKey("transition")) {
-          xyTarget.x = jsonMsg["color"]["x"];
-          if (xy.x != xyTarget.x) {
-            xyStep.x =
-                max(1, (int)min(abs((float)xyTarget.x - (float)xy.x),
-                                round(abs((float)xyTarget.x - (float)xy.x) /
-                                      ((float)intervalFreqHz *
-                                       (float)jsonMsg["transition"]))));
-            xyDeltaMs.x = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)xyStep.x) /
-                abs((float)xyTarget.x - (float)xy.x));
-            xyNextMillis.x = millis() + xyDeltaMs.x;
-          }
-          xyTarget.y = jsonMsg["color"]["y"];
-          if (xy.y != xyTarget.y) {
-            xyStep.y =
-                max(1, (int)min(abs((float)xyTarget.y - (float)xy.y),
-                                round(abs((float)xyTarget.y - (float)xy.y) /
-                                      ((float)intervalFreqHz *
-                                       (float)jsonMsg["transition"]))));
-            xyDeltaMs.y = round(
-                (1000.0f * (float)jsonMsg["transition"] * (float)xyStep.y) /
-                abs((float)xyTarget.y - (float)xy.y));
-            xyNextMillis.y = millis() + xyDeltaMs.y;
-          }
-        } else {
-          xy = {jsonMsg["color"]["x"], jsonMsg["color"]["y"]};
-          xyStep = {0, 0};
-        }
-        jsonState["color"] = jsonMsg["color"];
-        jsonState["color_mode"] = "xy";
-      }
-      // end-if xy_supported
-
-      // start-if effects_supported
-      if (jsonMsg.containsKey("effect")) {
-        effect = stringToEffect(jsonMsg["effect"]);
-        jsonState["effect"] = jsonMsg["effect"];
-      } else if (jsonMsg.containsKey("color") && effect != 0) {
-        effect = (Effect)0; // assumed to be 'none'
-        jsonState["effect"] = effectToString(effect);
-      }
-      // end-if effects_supported
-
-      // --------------------------------------------------
-
-      // start-if color_temp_supported
-      if (jsonState.containsKey("color_temp") &&
-          !jsonMsg.containsKey("transition")) {
-        color_temp_listener(color_temp);
-      }
-      // end-if color_temp_supported
-
-      // start-if rgb_supported
-      if (jsonState.containsKey("color") &&
-          !jsonMsg.containsKey("transition")) {
-        rgb_listener(rgb);
-      }
-      // end-if rgb_supported
-
-      // start-if rgbw_supported
-      if (jsonState.containsKey("color") &&
-          !jsonMsg.containsKey("transition")) {
-        rgbw_listener(rgbw);
-      }
-      // end-if rgbw_supported
-
-      // start-if rgbww_supported
-      if (jsonState.containsKey("color") &&
-          !jsonMsg.containsKey("transition")) {
-        rgbww_listener(rgbww);
-      }
-      // end-if rgbww_supported
-
-      // start-if hs_supported
-      if (jsonState.containsKey("color") &&
-          !jsonMsg.containsKey("transition")) {
-        hs_listener(hs);
-      }
-      // end-if hs_supported
-
-      // start-if xy_supported
-      if (jsonState.containsKey("color") &&
-          !jsonMsg.containsKey("transition")) {
-        xy_listener(xy);
-      }
-      // end-if xy_supported
-
-      // start-if effects_supported
-      if (jsonState.containsKey("effect")) {
-        effect_listener(effect);
-      }
-      // end-if effects_supported
-
-      // start-if brightness_supported
-      if (jsonState.containsKey("brightness") &&
-          !jsonMsg.containsKey("transition")) {
-        brightness_listener(brightness);
-      }
-      // end-if brightness_supported
-
-#if defined(OUTPUT_MODE_ONOFF) || !defined(OUTPUT_HANDLE)
-      if (jsonState.containsKey("state")) {
-        state_listener(state);
-      }
-#endif
-
-      char responseMsg[256];
-      serializeJson(jsonState, responseMsg, 256);
-      device.publish(stateTopic.c_str(), responseMsg, retain);
-
-      if (retain) {
-        if (jsonMsg.containsKey("state"))
-          jsonRetainedCommand["state"] = jsonMsg["state"];
-        // start-if brightness_supported
-        if (jsonMsg.containsKey("brightness"))
-          jsonRetainedCommand["brightness"] = jsonMsg["brightness"];
-        // end-if brightness_supported
-        // start-if color_temp_supported
-        if (jsonMsg.containsKey("color_temp"))
-          jsonRetainedCommand["color_temp"] = jsonMsg["color_temp"];
-        // end-if color_temp_supported
-        // start-if rgb_supported
-        if (jsonMsg.containsKey("color"))
-          jsonRetainedCommand["color"]["r"] = jsonMsg["color"]["r"];
-        jsonRetainedCommand["color"]["g"] = jsonMsg["color"]["g"];
-        jsonRetainedCommand["color"]["b"] = jsonMsg["color"]["b"];
-        // end-if rgb_supported
-        // start-if rgbw_supported
-        if (jsonMsg.containsKey("color"))
-          jsonRetainedCommand["color"]["r"] = jsonMsg["color"]["r"];
-        jsonRetainedCommand["color"]["g"] = jsonMsg["color"]["g"];
-        jsonRetainedCommand["color"]["b"] = jsonMsg["color"]["b"];
-        jsonRetainedCommand["color"]["w"] = jsonMsg["color"]["w"];
-        // end-if rgbw_supported
-        // start-if rgbww_supported
-        if (jsonMsg.containsKey("color"))
-          jsonRetainedCommand["color"]["r"] = jsonMsg["color"]["r"];
-        jsonRetainedCommand["color"]["g"] = jsonMsg["color"]["g"];
-        jsonRetainedCommand["color"]["b"] = jsonMsg["color"]["b"];
-        jsonRetainedCommand["color"]["c"] = jsonMsg["color"]["c"];
-        jsonRetainedCommand["color"]["w"] = jsonMsg["color"]["w"];
-        // end-if rgbww_supported
-        // start-if hs_supported
-        if (jsonMsg.containsKey("color"))
-          jsonRetainedCommand["color"]["h"] = jsonMsg["color"]["h"];
-        jsonRetainedCommand["color"]["s"] = jsonMsg["color"]["s"];
-        // end-if hs_supported
-        // start-if xy_supported
-        if (jsonMsg.containsKey("color"))
-          jsonRetainedCommand["color"]["x"] = jsonMsg["color"]["x"];
-        jsonRetainedCommand["color"]["y"] = jsonMsg["color"]["y"];
-        // end-if xy_supported
-        // start-if effects_supported
-        if (jsonMsg.containsKey("effect"))
-          jsonRetainedCommand["effect"] = effectToString(effect);
-        // end-if effects_supported
-
-        jsonRetainedCommand["retain-recovery"] = true;
-        serializeJson(jsonRetainedCommand, responseMsg, 256);
-        device.publish(commandTopic.c_str(), responseMsg, true);
-      }
-
-      if (jsonMsg.containsKey("flash")) {
-        device.setTimeout(((uint32_t)jsonMsg["flash"]) * 1000, [this]() {
-          device.publish(commandTopic.c_str(), "{\"state\":\"OFF\"}", retain);
-        });
-      }
+      updateState();
     });
 
     bool needLooper = false;
@@ -1310,13 +1301,9 @@ public:
   bool getState() { return state; }
 
   void setState(bool newState) {
-    StaticJsonDocument<32> jsonDoc;
-    jsonDoc["state"] = newState ? "ON" : "OFF";
-
-    char message[32];
-    serializeJson(jsonDoc, message, 32);
-    jsonDoc.clear();
-    device.publish(commandTopic.c_str(), message, retain);
+    jsonMsg.clear();
+    jsonMsg["state"] = newState ? "ON" : "OFF";
+    updateState();
   }
 
 #ifndef OUTPUT_HANDLE
@@ -1330,17 +1317,13 @@ public:
   UINT_RESOLUTION_T getBrightness() { return brightness; }
 
   void setBrightness(UINT_RESOLUTION_T newBrightness) {
+    jsonMsg.clear();
     bool newState = newBrightness > 0;
 
-    StaticJsonDocument<64> jsonDoc;
-    jsonDoc["state"] = newState ? "ON" : "OFF";
+    jsonMsg["state"] = newState ? "ON" : "OFF";
+    jsonMsg["brightness"] = newBrightness;
 
-    jsonDoc["brightness"] = newBrightness;
-
-    char message[64];
-    serializeJson(jsonDoc, message, 64);
-    jsonDoc.clear();
-    device.publish(commandTopic.c_str(), message, retain);
+    updateState();
   }
 
 #ifndef OUTPUT_HANDLE
@@ -1369,17 +1352,13 @@ public:
   }
 
   void setColorTemp(uint16_t newColorTemp) {
-    StaticJsonDocument<64> jsonDoc;
-    jsonDoc["state"] = state ? "ON" : "OFF";
+    jsonMsg.clear();
 
-    jsonDoc["color_mode"] = "color_temp";
+    jsonMsg["state"] = state ? "ON" : "OFF";
+    jsonMsg["color_mode"] = "color_temp";
+    jsonMsg["color_temp"] = newColorTemp;
 
-    jsonDoc["color_temp"] = newColorTemp;
-
-    char message[64];
-    serializeJson(jsonDoc, message, 64);
-    jsonDoc.clear();
-    device.publish(commandTopic.c_str(), message, retain);
+    updateState();
   }
 
 #ifndef OUTPUT_HANDLE
@@ -1401,21 +1380,19 @@ public:
   }
 
   void setRGB(Color_RGB _rgb) {
+    jsonMsg.clear();
+
     bool newState = _rgb.r > 0 || _rgb.g > 0 || _rgb.b > 0;
 
-    StaticJsonDocument<96> jsonDoc;
-    jsonDoc["state"] = newState ? "ON" : "OFF";
+    jsonMsg["state"] = newState ? "ON" : "OFF";
 
-    jsonDoc["color_mode"] = "rgb";
+    jsonMsg["color_mode"] = "rgb";
 
-    jsonDoc["color"]["r"] = _rgb.r;
-    jsonDoc["color"]["g"] = _rgb.g;
-    jsonDoc["color"]["b"] = _rgb.b;
+    jsonMsg["color"]["r"] = _rgb.r;
+    jsonMsg["color"]["g"] = _rgb.g;
+    jsonMsg["color"]["b"] = _rgb.b;
 
-    char message[96];
-    serializeJson(jsonDoc, message, 96);
-    jsonDoc.clear();
-    device.publish(commandTopic.c_str(), message, retain);
+    updateState();
   }
 
 #ifndef OUTPUT_HANDLE
@@ -1438,22 +1415,19 @@ public:
   }
 
   void setRGBW(Color_RGBW _rgbw) {
-    bool newState = _rgbw.r > 0 || _rgbw.g > 0 || _rgbw.b > 0 || _rgbw.w > 0;
+    jsonMsg.clear() bool newState =
+        _rgbw.r > 0 || _rgbw.g > 0 || _rgbw.b > 0 || _rgbw.w > 0;
 
-    StaticJsonDocument<96> jsonDoc;
-    jsonDoc["state"] = newState ? "ON" : "OFF";
+    jsonMsg["state"] = newState ? "ON" : "OFF";
 
-    jsonDoc["color_mode"] = "rgbw";
+    jsonMsg["color_mode"] = "rgbw";
 
-    jsonDoc["color"]["r"] = _rgbw.r;
-    jsonDoc["color"]["g"] = _rgbw.g;
-    jsonDoc["color"]["b"] = _rgbw.b;
-    jsonDoc["color"]["w"] = _rgbw.w;
+    jsonMsg["color"]["r"] = _rgbw.r;
+    jsonMsg["color"]["g"] = _rgbw.g;
+    jsonMsg["color"]["b"] = _rgbw.b;
+    jsonMsg["color"]["w"] = _rgbw.w;
 
-    char message[96];
-    serializeJson(jsonDoc, message, 96);
-    jsonDoc.clear();
-    device.publish(commandTopic.c_str(), message, retain);
+    updateState();
   }
 
 #ifndef OUTPUT_HANDLE
@@ -1477,24 +1451,21 @@ public:
   }
 
   void setRGBWW(Color_RGBWW _rgbww) {
+    jsonMsg.clear();
     bool newState = _rgbww.r > 0 || _rgbww.g > 0 || _rgbww.b > 0 ||
                     _rgbww.c > 0 || _rgbww.w > 0;
 
-    StaticJsonDocument<96> jsonDoc;
-    jsonDoc["state"] = newState ? "ON" : "OFF";
+    jsonMsg["state"] = newState ? "ON" : "OFF";
 
-    jsonDoc["color_mode"] = "rgbww";
+    jsonMsg["color_mode"] = "rgbww";
 
-    jsonDoc["color"]["r"] = _rgbww.r;
-    jsonDoc["color"]["g"] = _rgbww.g;
-    jsonDoc["color"]["b"] = _rgbww.b;
-    jsonDoc["color"]["c"] = _rgbww.c;
-    jsonDoc["color"]["w"] = _rgbww.w;
+    jsonMsg["color"]["r"] = _rgbww.r;
+    jsonMsg["color"]["g"] = _rgbww.g;
+    jsonMsg["color"]["b"] = _rgbww.b;
+    jsonMsg["color"]["c"] = _rgbww.c;
+    jsonMsg["color"]["w"] = _rgbww.w;
 
-    char message[96];
-    serializeJson(jsonDoc, message, 96);
-    jsonDoc.clear();
-    device.publish(commandTopic.c_str(), message, retain);
+    updateState();
   }
 
 #ifndef OUTPUT_HANDLE
@@ -1509,20 +1480,17 @@ public:
   Color_HS getHS() { return hs; }
 
   void setHS(Color_HS _hs) {
+    jsonMsg.clear();
     bool newState = _hs.h > 0 || _hs.s > 0;
 
-    StaticJsonDocument<96> jsonDoc;
-    jsonDoc["state"] = newState ? "ON" : "OFF";
+    jsonMsg["state"] = newState ? "ON" : "OFF";
 
-    jsonDoc["color_mode"] = "hs";
+    jsonMsg["color_mode"] = "hs";
 
-    jsonDoc["color"]["h"] = _hs.h;
-    jsonDoc["color"]["s"] = _hs.s;
+    jsonMsg["color"]["h"] = _hs.h;
+    jsonMsg["color"]["s"] = _hs.s;
 
-    char message[96];
-    serializeJson(jsonDoc, message, 96);
-    jsonDoc.clear();
-    device.publish(commandTopic.c_str(), message, retain);
+    updateState();
   }
 
 #ifndef OUTPUT_HANDLE
@@ -1537,18 +1505,15 @@ public:
   Color_XY getXY() { return xy; }
 
   void setXY(Color_XY _xy) {
-    StaticJsonDocument<96> jsonDoc;
-    jsonDoc["state"] = state ? "ON" : "OFF";
+    jsonMsg.clear();
+    jsonMsg["state"] = state ? "ON" : "OFF";
 
-    jsonDoc["color_mode"] = "xy";
+    jsonMsg["color_mode"] = "xy";
 
-    jsonDoc["color"]["x"] = _xy.x;
-    jsonDoc["color"]["y"] = _xy.y;
+    jsonMsg["color"]["x"] = _xy.x;
+    jsonMsg["color"]["y"] = _xy.y;
 
-    char message[96];
-    serializeJson(jsonDoc, message, 96);
-    jsonDoc.clear();
-    device.publish(commandTopic.c_str(), message, retain);
+    updateState();
   }
 
 #ifndef OUTPUT_HANDLE
@@ -1583,13 +1548,10 @@ public:
   }
 
   void setEffect(Effect _effect) {
-    StaticJsonDocument<96> jsonDoc;
-    jsonDoc["effect"] = effectToString(_effect);
+    jsonMsg.clear();
+    jsonMsg["effect"] = effectToString(_effect);
 
-    char message[96];
-    serializeJson(jsonDoc, message, 96);
-    jsonDoc.clear();
-    device.publish(commandTopic.c_str(), message, retain);
+    updateState();
   }
 
 #ifndef OUTPUT_HANDLE

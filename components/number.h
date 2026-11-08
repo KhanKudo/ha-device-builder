@@ -19,6 +19,12 @@ private:
 
   double value = 0;
 
+  void updateState(double newValue) {
+    value = newValue;
+    device.publish(stateTopic.c_str(), String(newValue).c_str(), retain);
+    listener(newValue);
+  }
+
 public:
   const double min = MIN;
   const double max = MAX;
@@ -31,22 +37,19 @@ public:
     }
 
     device.subscribe(commandTopic.c_str(), [this](String message) {
-      value = message.toDouble();
-      device.publish(stateTopic.c_str(), message.c_str(), retain);
-      listener(value);
+      updateState(message.toDouble());
     });
   }
 
   double getValue() { return value; }
 
-  void setValue(double newValue) {
-    device.publish(commandTopic.c_str(), String(newValue).c_str(), retain);
-  }
+  void setValue(double newValue) { updateState(newValue); }
 
-  void setNone() {
-    value = 0;
-    device.publish(commandTopic.c_str(), "None", retain);
-  }
+  // void setNone()
+  // {
+  //     value = 0;
+  //     device.publish(commandTopic.c_str(), "None", retain);
+  // }
 
   // only one listener will work, newest overwrites previous
   void onChange(std::function<void(double)> _listener) { listener = _listener; }

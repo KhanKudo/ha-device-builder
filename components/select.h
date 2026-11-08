@@ -23,6 +23,13 @@ private:
 
   std::function<void(Option)> listener = [](Option) {};
 
+  void updateState(Option newState) {
+    state = newState;
+    device.publish(stateTopic.c_str(), optionToString(newState).c_str(),
+                   retain);
+    listener(newState);
+  }
+
 public:
   const String options[NUMBER_OF_OPTIONS] = {
       // __insert-option-list
@@ -35,9 +42,7 @@ public:
     }
 
     device.subscribe(commandTopic.c_str(), [this](String message) {
-      state = stringToOption(message);
-      device.publish(stateTopic.c_str(), message.c_str(), retain);
-      listener(state);
+      updateState(stringToOption(message));
     });
   }
 
@@ -58,10 +63,7 @@ public:
 
   Option getState() { return state; }
 
-  void setState(Option option) {
-    device.publish(commandTopic.c_str(), optionToString(option).c_str(),
-                   retain);
-  }
+  void setState(Option option) { updateState(option); }
 
   // only one listener will work, newest overwrites previous
   void onChange(std::function<void(Option)> _listener) { listener = _listener; }
