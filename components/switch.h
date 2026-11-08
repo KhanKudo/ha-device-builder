@@ -21,7 +21,7 @@ private:
     device.publish(stateTopic.c_str(), newState ? "ON" : "OFF", retain);
     listener(newState);
 
-    device.checkAutomation(name, (uint32_t)state);
+    // device.checkAutomation(name, (uint32_t)state);
   }
 
 public:

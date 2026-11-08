@@ -24,7 +24,7 @@ private:
     device.publish(stateTopic.c_str(), String(newValue).c_str(), retain);
     listener(newValue);
 
-    device.checkAutomation(name, (uint32_t)newValue);
+    // device.checkAutomation(name, (uint32_t)newValue);
   }
 
 public:

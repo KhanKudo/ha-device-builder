@@ -73,9 +73,30 @@ private:
     std::function<void(void)> func;
   };
 
+  enum CondSrcType { RAW, INT, LEN };
+
+  struct CondSource {
+    uint16_t id;
+    uint16_t condId;
+    CondSrcType type;
+    String topic;
+  };
+
+  // Gates reference other conditions (2x u32 -> 2x u16)
+  // Comparators check the raw values (2x u32)
+  // enum CondType { AND, OR, XOR, NAND, NOR, XNOR, EQ, GT, GE, LT, LE, BITAND,
+  // BITOR, BITXOR };
+  enum CondType { AND, OR, NAND, NOR, EQ, NQ, GT, GE, LT, LE };
+
+  struct Condition {
+    uint16_t id;
+    CondType type;
+    uint32_t a;
+    uint32_t b;
+  };
+
   struct Automation {
-    String id;
-    uint32_t state;
+    uint16_t id;
     String topic;
     String data;
   };
@@ -98,6 +119,8 @@ private:
   std::vector<std::function<void(void)>> loopers;
 
   StaticJsonDocument<256> jsonMsg;
+  std::vector<_HA_DEVICE::CondSource> sources;
+  std::vector<_HA_DEVICE::Condition> conditions;
   std::vector<_HA_DEVICE::Automation> automations;
   String automationTopic = "AUTOMATION_TOPIC";
 
@@ -231,34 +254,94 @@ private:
         }
 #endif
 
-        if (topic == automationTopic + "/clear") {
-          automations.clear();
-          Serial.println("Cleared all automations!");
-          return;
-        }
-
         String message = String((char *)payload, length);
 
-        if (topic.startsWith(automationTopic + "/add")) {
-          deserializeJson(jsonMsg, message);
-          automations.push_back({jsonMsg["id"], (uint32_t)jsonMsg["state"],
-                                 jsonMsg["topic"], jsonMsg["data"]});
-          Serial.println(String("Added Automation: ") + String(jsonMsg["id"]) +
-                         String(" | topic: ") + String(jsonMsg["topic"]) +
-                         String(" | data: ") + String(jsonMsg["data"]));
-          return;
-        } else if (topic == automationTopic + "/remove") {
-          automations.erase(std::remove_if(automations.begin(),
-                                           automations.end(),
-                                           [&message](auto &item) {
-                                             return item.id == message;
-                                           }),
-                            automations.end());
-          Serial.println(String("Removed Automations for id: ") + message);
+        if (topic.startsWith(automationTopic + '/')) {
+          if (topic == automationTopic + "/clear") {
+            sources.clear();
+            conditions.clear();
+            automations.clear();
+            Serial.println("Cleared all actions, conditions and sources!");
+          } else if (topic.startsWith(automationTopic + "/add/source/")) {
+            deserializeJson(jsonMsg, message);
+            sources.push_back({(uint16_t)jsonMsg["id"],
+                               (uint16_t)jsonMsg["condId"], jsonMsg["type"],
+                               jsonMsg["topic"]});
+            Serial.println(String("Added Source || id: ") +
+                           String(jsonMsg["id"]) + String(" | condId: ") +
+                           String(jsonMsg["condId"]) + String(" | type: ") +
+                           String(jsonMsg["type"]) + String(" | topic: ") +
+                           String(jsonMsg["topic"]));
+            client.subscribe(String(jsonMsg["topic"]).c_str());
+          } else if (topic.startsWith(automationTopic + "/add/condition/")) {
+            deserializeJson(jsonMsg, message);
+            conditions.push_back({(uint16_t)jsonMsg["id"], jsonMsg["type"],
+                                  (uint32_t)jsonMsg["a"],
+                                  (uint32_t)jsonMsg["b"]});
+            Serial.println(String("Added Condition || id: ") +
+                           String(jsonMsg["id"]) + String(" | type: ") +
+                           String(jsonMsg["type"]) + String(" | a: ") +
+                           String(jsonMsg["a"]) + String(" | b: ") +
+                           String(jsonMsg["b"]));
+          } else if (topic.startsWith(automationTopic + "/add/action/")) {
+            deserializeJson(jsonMsg, message);
+            automations.push_back(
+                {(uint16_t)jsonMsg["id"], jsonMsg["topic"], jsonMsg["data"]});
+            Serial.println(String("Added Action || id: ") +
+                           String(jsonMsg["id"]) + String(" | topic: ") +
+                           String(jsonMsg["topic"]) + String(" | data: ") +
+                           String(jsonMsg["data"]));
+          } else if (topic == automationTopic + "/remove") {
+            // TODO
+
+            // automations.erase(std::remove_if(automations.begin(),
+            //                                  automations.end(),
+            //                                  [&message](auto &item) {
+            //                                    return item.id == message;
+            //                                  }),
+            //                   automations.end());
+            Serial.println(String("Removed Action for condId and all related "
+                                  "conditions & sources: ") +
+                           message);
+          }
           return;
         }
 
-        listeners.at(topic)(message);
+        auto it = listeners.find(topic);
+        if (it != listeners.end()) {
+          it->second(message); // call listener
+        } else { // look if subscription came from an automation's source
+          for (auto it = sources.begin(); it != sources.end(); ++it) {
+            yield();
+            if (topic == it->topic) {
+              Serial.println(String("Received Source Update || id: ") +
+                             String(it->id) + String(" | topic: ") + topic +
+                             String(" | message: ") + message);
+              for (auto ct = conditions.begin(); ct != conditions.end(); ++ct) {
+                yield();
+                if (it->condId == ct->id) {
+                  if (it->type == _HA_DEVICE::CondSrcType::RAW) {
+                    if (length < 4) {
+                      Serial.println(
+                          " !!!FAILED!!! Source-Type is RAW but length is less "
+                          "than 4 bytes (required for uint32_t).");
+                      break;
+                    }
+                    ct->a = *(uint32_t *)payload;
+                  } else if (it->type == _HA_DEVICE::CondSrcType::INT) {
+                    ct->a = length ? message.toInt() : 0;
+                  } else if (it->type == _HA_DEVICE::CondSrcType::LEN) {
+                    ct->a = (uint32_t)length;
+                  }
+                  Serial.println(String("  Updated Condition (a): ") +
+                                 String(ct->id));
+                  break;
+                }
+              }
+              checkAutomation(it->condId);
+            }
+          }
+        }
       };
 
   void reconnect() {
@@ -278,9 +361,14 @@ private:
     client.subscribe(otaServer.c_str());
 #endif
     client.subscribe((automationTopic + "/clear").c_str());
-    client.subscribe((automationTopic + "/add").c_str());
-    client.subscribe((automationTopic + "/add/#").c_str());
+    client.subscribe((automationTopic + "/add/source/#").c_str());
+    client.subscribe((automationTopic + "/add/condition/#").c_str());
+    client.subscribe((automationTopic + "/add/action/#").c_str());
     client.subscribe((automationTopic + "/remove").c_str());
+
+    for (auto it = sources.begin(); it != sources.end(); it++) {
+      client.subscribe(it->topic.c_str());
+    }
 
     for (auto it = listeners.cbegin(); it != listeners.cend(); it++) {
       client.subscribe(it->first.c_str());
@@ -513,21 +601,68 @@ public:
     loopers.push_back(callback);
   }
 
-  void checkAutomation(String id, uint32_t state) {
-    if (automations.size() == 0)
+  bool checkCondition(uint16_t id) {
+    for (auto it = conditions.begin(); it != conditions.end(); ++it) {
+      yield();
+      if (id == it->id) {
+        Serial.println(String("Found Condition: ") + id);
+        if (it->type == _HA_DEVICE::CondType::EQ) {
+          if (it->a == it->b)
+            return true;
+        } else if (it->type == _HA_DEVICE::CondType::NQ) {
+          if (it->a != it->b)
+            return true;
+        } else if (it->type == _HA_DEVICE::CondType::GT) {
+          if (it->a > it->b)
+            return true;
+        } else if (it->type == _HA_DEVICE::CondType::GE) {
+          if (it->a >= it->b)
+            return true;
+        } else if (it->type == _HA_DEVICE::CondType::LT) {
+          if (it->a < it->b)
+            return true;
+        } else if (it->type == _HA_DEVICE::CondType::LE) {
+          if (it->a <= it->b)
+            return true;
+        } else if (it->type == _HA_DEVICE::CondType::AND) {
+          if (checkCondition(it->a) && checkCondition(it->b))
+            return true;
+        } else if (it->type == _HA_DEVICE::CondType::OR) {
+          if (checkCondition(it->a) || checkCondition(it->b))
+            return true;
+        } else if (it->type == _HA_DEVICE::CondType::NAND) {
+          if (!(checkCondition(it->a) && checkCondition(it->b)))
+            return true;
+        } else if (it->type == _HA_DEVICE::CondType::NOR) {
+          if (!(checkCondition(it->a) || checkCondition(it->b)))
+            return true;
+        } else {
+          return false;
+        }
+      }
+    }
+    return false;
+  }
+
+  void checkAutomation(uint16_t id) {
+    if (conditions.size() == 0 || automations.size() == 0)
       return;
+
+    Serial.println(String("Checking Automation: ") + id);
+    if (!checkCondition(id)) {
+      Serial.println(String("  Condition for Automation was not satisfied!"));
+      return;
+    }
 
     for (auto it = automations.begin(); it != automations.end(); ++it) {
       yield();
       if (id == it->id) {
-        Serial.println(String("Found matching Automation: ") + id);
-        if (state == it->state) {
-          Serial.println("  Triggered!");
-          client.publish(it->topic.c_str(), it->data.c_str(), false);
-        } else {
-          Serial.println("  State not matched!");
-        }
+        Serial.println(String("  Triggered Automation || topic: ") + it->topic +
+                       String(" | data: ") + it->data);
+        client.publish(it->topic.c_str(), it->data.c_str(), false);
+        return;
       }
     }
+    Serial.println(String("  Failed to find Automation!"));
   }
 } device;
