@@ -3,64 +3,57 @@
 #define RETAIN false
 
 // start
-struct _VAR_NAME
-{
+struct _VAR_NAME {
 private:
-    const String name = "NAME";
+  const String name = "NAME";
 
-    const String commandTopic = "COMMAND_TOPIC";
-    const String stateTopic = "STATE_TOPIC";
+  const String commandTopic = "COMMAND_TOPIC";
+  const String stateTopic = "STATE_TOPIC";
 
-    const bool retain = RETAIN;
+  const bool retain = RETAIN;
 
-    std::function<void(bool)> listenerLock = [](bool) {};
-    std::function<void()> listenerOpen = []() {};
+  std::function<void(bool)> listenerLock = [](bool) {};
+  std::function<void()> listenerOpen = []() {};
 
-    bool stateIsLocked = false;
+  bool stateIsLocked = false;
 
 public:
-   void _init()
-    {
-        if (!retain)
-        {
-            device.clearRetain(commandTopic.c_str());
-            device.clearRetain(stateTopic.c_str());
-        }
-
-        device.subscribe(commandTopic.c_str(), [this](String message)
-                         {
-                            if(message != "LOCK" && message != "UNLOCK" && message != "OPEN") return;
-
-                            if(message == "OPEN"){
-                                listenerOpen();
-                                return;
-                            }
-
-                            stateIsLocked = message == "LOCK";
-                            device.publish(stateTopic.c_str(), stateIsLocked ? "LOCKED" : "UNLOCKED", retain);
-                            listenerLock(stateIsLocked); });
+  void _init() {
+    if (!retain) {
+      device.clearRetain(commandTopic.c_str());
+      device.clearRetain(stateTopic.c_str());
     }
 
-    // true if locked, false if unlocked
-    bool isLocked()
-    {
-        return stateIsLocked;
-    }
+    device.subscribe(commandTopic.c_str(), [this](String message) {
+      if (message != "LOCK" && message != "UNLOCK" && message != "OPEN")
+        return;
 
-    void setLock(bool isLocked)
-    {
-        device.publish(commandTopic.c_str(), isLocked ? "LOCKED" : "UNLOCKED", retain);
-    }
+      if (message == "OPEN") {
+        listenerOpen();
+        return;
+      }
 
-    // only one listener will work, newest overwrites previous, bool argument true if locked, false if unlocked
-    void onLockChange(std::function<void(bool)> _listener)
-    {
-        listenerLock = _listener;
-    }
+      stateIsLocked = message == "LOCK";
+      device.publish(stateTopic.c_str(), stateIsLocked ? "LOCKED" : "UNLOCKED",
+                     retain);
+      listenerLock(stateIsLocked);
+    });
+  }
 
-    // only one listener will work, newest overwrites previous
-    void onOpen(std::function<void()> _listener)
-    {
-        listenerOpen = _listener;
-    }
+  // true if locked, false if unlocked
+  bool isLocked() { return stateIsLocked; }
+
+  void setLock(bool isLocked) {
+    device.publish(commandTopic.c_str(), isLocked ? "LOCKED" : "UNLOCKED",
+                   retain);
+  }
+
+  // only one listener will work, newest overwrites previous, bool argument true
+  // if locked, false if unlocked
+  void onLockChange(std::function<void(bool)> _listener) {
+    listenerLock = _listener;
+  }
+
+  // only one listener will work, newest overwrites previous
+  void onOpen(std::function<void()> _listener) { listenerOpen = _listener; }
 } VAR_NAME;

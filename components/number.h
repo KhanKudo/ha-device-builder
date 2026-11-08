@@ -6,59 +6,48 @@
 #define STEP 0
 
 // start
-struct _VAR_NAME
-{
+struct _VAR_NAME {
 private:
-    const String name = "NAME";
+  const String name = "NAME";
 
-    const String commandTopic = "COMMAND_TOPIC";
-    const String stateTopic = "STATE_TOPIC";
+  const String commandTopic = "COMMAND_TOPIC";
+  const String stateTopic = "STATE_TOPIC";
 
-    const bool retain = RETAIN;
+  const bool retain = RETAIN;
 
-    std::function<void(double)> listener = [](double) {};
+  std::function<void(double)> listener = [](double) {};
 
-    double value = 0;
+  double value = 0;
 
 public:
-    const double min = MIN;
-    const double max = MAX;
-    const double step = STEP;
+  const double min = MIN;
+  const double max = MAX;
+  const double step = STEP;
 
-   void _init()
-    {
-        if (!retain)
-        {
-            device.clearRetain(commandTopic.c_str());
-            device.clearRetain(stateTopic.c_str());
-        }
-
-        device.subscribe(commandTopic.c_str(), [this](String message)
-                         {
-                            value = message.toDouble();
-                            device.publish(stateTopic.c_str(), message.c_str(), retain);
-                            listener(value); });
+  void _init() {
+    if (!retain) {
+      device.clearRetain(commandTopic.c_str());
+      device.clearRetain(stateTopic.c_str());
     }
 
-    double getValue()
-    {
-        return value;
-    }
+    device.subscribe(commandTopic.c_str(), [this](String message) {
+      value = message.toDouble();
+      device.publish(stateTopic.c_str(), message.c_str(), retain);
+      listener(value);
+    });
+  }
 
-    void setValue(double newValue)
-    {
-        device.publish(commandTopic.c_str(), String(newValue).c_str(), retain);
-    }
+  double getValue() { return value; }
 
-    void setNone()
-    {
-        value = 0;
-        device.publish(commandTopic.c_str(), "None", retain);
-    }
+  void setValue(double newValue) {
+    device.publish(commandTopic.c_str(), String(newValue).c_str(), retain);
+  }
 
-    // only one listener will work, newest overwrites previous
-    void onChange(std::function<void(double)> _listener)
-    {
-        listener = _listener;
-    }
+  void setNone() {
+    value = 0;
+    device.publish(commandTopic.c_str(), "None", retain);
+  }
+
+  // only one listener will work, newest overwrites previous
+  void onChange(std::function<void(double)> _listener) { listener = _listener; }
 } VAR_NAME;

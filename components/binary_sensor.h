@@ -3,26 +3,22 @@
 #define RETAIN false
 
 // start
-struct _VAR_NAME
-{
+struct _VAR_NAME {
 private:
-    const String name = "NAME";
+  const String name = "NAME";
 
-    const String stateTopic = "STATE_TOPIC";
+  const String stateTopic = "STATE_TOPIC";
 
-    const bool retain = RETAIN;
+  const bool retain = RETAIN;
 
 public:
-    void _init()
-    {
-        if (!retain)
-        {
-            device.clearRetain(stateTopic.c_str());
-        }
+  void _init() {
+    if (!retain) {
+      device.clearRetain(stateTopic.c_str());
     }
+  }
 
-    void update(bool newState)
-    {
-        device.publish(stateTopic.c_str(), newState ? "ON" : "OFF", retain);
-    }
+  void update(bool newState) {
+    device.publish(stateTopic.c_str(), newState ? "ON" : "OFF", retain);
+  }
 } VAR_NAME;
