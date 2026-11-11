@@ -75,18 +75,24 @@ private:
 
   enum CondSrcType { RAW, INT, LEN };
 
+  // TODO: just put state directly into here and provide the source's id inside
+  // cond a
+  // TODO: might then also make sense to make source ids independent of action
+  // (automation) ids
   struct CondSource {
     uint16_t id;
-    uint16_t condId;
+    uint32_t state;
     CondSrcType type;
     String topic;
   };
 
-  // Gates reference other conditions (2x u32 -> 2x u16)
-  // Comparators check the raw values (2x u32)
-  // enum CondType { AND, OR, XOR, NAND, NOR, XNOR, EQ, GT, GE, LT, LE, BITAND,
-  // BITOR, BITXOR };
-  enum CondType { AND, OR, NAND, NOR, EQ, NQ, GT, GE, LT, LE };
+  // Gates reference other conditions a(u16) b(u16) - note u16=id-ref,u32=static
+  // Comparators compare a source with either a static value or another source
+  //   if a>>16 == 0 then static compare a(u16) == b(u32)
+  //   if a>>16 != 0 then source compare a(u16 & 0xffff) == a(u16 >> 16) b(x)
+  // enum CondType { AND, OR, XOR, NAND, NOR, XNOR, EQ, GT, GE, LT, LE, MOD,
+  // NMOD, BITAND, BITOR, BITXOR };
+  enum CondType { AND, OR, XOR, NAND, NOR, XNOR, EQ = 128, NQ, GT, GE, LT, LE };
 
   struct Condition {
     uint16_t id;
@@ -97,6 +103,8 @@ private:
 
   struct Automation {
     uint16_t id;
+    uint16_t condId;
+    uint16_t triggerSrc;
     String topic;
     String data;
   };
@@ -164,6 +172,7 @@ private:
   std::function<void(char *, byte *, unsigned int)> callback =
       [this](char *char_topic, byte *payload, unsigned int length) {
         String topic = char_topic;
+        Serial.println(topic);
 
 #ifdef OTA_UPDATE
         if (topic == otaServer) {
@@ -262,14 +271,16 @@ private:
             conditions.clear();
             automations.clear();
             Serial.println("Cleared all actions, conditions and sources!");
+          } else if (length == 0) {
+            return;
           } else if (topic.startsWith(automationTopic + "/add/source/")) {
             deserializeJson(jsonMsg, message);
             sources.push_back({(uint16_t)jsonMsg["id"],
-                               (uint16_t)jsonMsg["condId"], jsonMsg["type"],
+                               (uint32_t)jsonMsg["state"], jsonMsg["type"],
                                jsonMsg["topic"]});
             Serial.println(String("Added Source || id: ") +
-                           String(jsonMsg["id"]) + String(" | condId: ") +
-                           String(jsonMsg["condId"]) + String(" | type: ") +
+                           String(jsonMsg["id"]) + String(" | state: ") +
+                           String(jsonMsg["state"]) + String(" | type: ") +
                            String(jsonMsg["type"]) + String(" | topic: ") +
                            String(jsonMsg["topic"]));
             client.subscribe(String(jsonMsg["topic"]).c_str());
@@ -285,24 +296,21 @@ private:
                            String(jsonMsg["b"]));
           } else if (topic.startsWith(automationTopic + "/add/action/")) {
             deserializeJson(jsonMsg, message);
-            automations.push_back(
-                {(uint16_t)jsonMsg["id"], jsonMsg["topic"], jsonMsg["data"]});
-            Serial.println(String("Added Action || id: ") +
-                           String(jsonMsg["id"]) + String(" | topic: ") +
-                           String(jsonMsg["topic"]) + String(" | data: ") +
-                           String(jsonMsg["data"]));
+            automations.push_back({(uint16_t)jsonMsg["id"],
+                                   (uint16_t)jsonMsg["condId"],
+                                   (uint16_t)jsonMsg["triggerSrc"],
+                                   jsonMsg["topic"], jsonMsg["data"]});
+            Serial.println(
+                String("Added Action || id: ") + String(jsonMsg["id"]) +
+                String(" | condId: ") + String(jsonMsg["condId"]) +
+                String(" | triggerSrc: ") + String(jsonMsg["triggerSrc"]) +
+                String(" | topic: ") + String(jsonMsg["topic"]) +
+                String(" | data: ") + String(jsonMsg["data"]));
           } else if (topic == automationTopic + "/remove") {
-            // TODO
-
-            // automations.erase(std::remove_if(automations.begin(),
-            //                                  automations.end(),
-            //                                  [&message](auto &item) {
-            //                                    return item.id == message;
-            //                                  }),
-            //                   automations.end());
-            Serial.println(String("Removed Action for condId and all related "
-                                  "conditions & sources: ") +
-                           message);
+            sources.clear();
+            conditions.clear();
+            automations.clear();
+            Serial.println("Removed all actions, conditions and sources");
           }
           return;
         }
@@ -317,28 +325,23 @@ private:
               Serial.println(String("Received Source Update || id: ") +
                              String(it->id) + String(" | topic: ") + topic +
                              String(" | message: ") + message);
-              for (auto ct = conditions.begin(); ct != conditions.end(); ++ct) {
+              if (it->type == RAW) {
+                it->state = 0;
+                memcpy(&it->state, payload, length < 4 ? length : 4);
+              } else if (it->type == INT) {
+                it->state = length ? message.toInt() : 0;
+              } else if (it->type == LEN) {
+                it->state = (uint32_t)length;
+              }
+
+              for (auto ait = automations.begin(); ait != automations.end();
+                   ++ait) {
                 yield();
-                if (it->condId == ct->id) {
-                  if (it->type == _HA_DEVICE::CondSrcType::RAW) {
-                    if (length < 4) {
-                      Serial.println(
-                          " !!!FAILED!!! Source-Type is RAW but length is less "
-                          "than 4 bytes (required for uint32_t).");
-                      break;
-                    }
-                    ct->a = *(uint32_t *)payload;
-                  } else if (it->type == _HA_DEVICE::CondSrcType::INT) {
-                    ct->a = length ? message.toInt() : 0;
-                  } else if (it->type == _HA_DEVICE::CondSrcType::LEN) {
-                    ct->a = (uint32_t)length;
-                  }
-                  Serial.println(String("  Updated Condition (a): ") +
-                                 String(ct->id));
-                  break;
+                if (ait->triggerSrc == it->id) {
+                  checkAutomation(ait->id);
+                  continue;
                 }
               }
-              checkAutomation(it->condId);
             }
           }
         }
@@ -601,44 +604,90 @@ public:
     loopers.push_back(callback);
   }
 
+  bool evalCondition(CondType type, uint32_t a, uint32_t b) {
+    switch (type) {
+    case AND:
+      return (a && b);
+    case OR:
+      return (a || b);
+    case NAND:
+      return !(a && b);
+    case NOR:
+      return !(a || b);
+    case XNOR:
+    case EQ:
+      return (a == b);
+    case XOR:
+    case NQ:
+      return (a != b);
+    case GT:
+      return (a > b);
+    case GE:
+      return (a >= b);
+    case LT:
+      return (a < b);
+    case LE:
+      return (a <= b);
+    default:
+      return false;
+    }
+    return false;
+  }
+
   bool checkCondition(uint16_t id) {
     for (auto it = conditions.begin(); it != conditions.end(); ++it) {
       yield();
       if (id == it->id) {
         Serial.println(String("Found Condition: ") + id);
-        if (it->type == _HA_DEVICE::CondType::EQ) {
-          if (it->a == it->b)
-            return true;
-        } else if (it->type == _HA_DEVICE::CondType::NQ) {
-          if (it->a != it->b)
-            return true;
-        } else if (it->type == _HA_DEVICE::CondType::GT) {
-          if (it->a > it->b)
-            return true;
-        } else if (it->type == _HA_DEVICE::CondType::GE) {
-          if (it->a >= it->b)
-            return true;
-        } else if (it->type == _HA_DEVICE::CondType::LT) {
-          if (it->a < it->b)
-            return true;
-        } else if (it->type == _HA_DEVICE::CondType::LE) {
-          if (it->a <= it->b)
-            return true;
-        } else if (it->type == _HA_DEVICE::CondType::AND) {
-          if (checkCondition(it->a) && checkCondition(it->b))
-            return true;
-        } else if (it->type == _HA_DEVICE::CondType::OR) {
-          if (checkCondition(it->a) || checkCondition(it->b))
-            return true;
-        } else if (it->type == _HA_DEVICE::CondType::NAND) {
-          if (!(checkCondition(it->a) && checkCondition(it->b)))
-            return true;
-        } else if (it->type == _HA_DEVICE::CondType::NOR) {
-          if (!(checkCondition(it->a) || checkCondition(it->b)))
-            return true;
-        } else {
-          return false;
+        if (it->type & 0x80) { // comparison
+          Serial.println("  Type: Comparison");
+          if (it->a >> 16) { // source against source
+            Serial.println("  Kind: Source vs Source");
+            uint16_t ida = it->a & 0xffff;
+            uint16_t idb = it->a >> 16;
+            uint8_t found = 0;
+            uint32_t state = 0;
+            for (auto sit = sources.begin(); sit != sources.end(); ++sit) {
+              yield();
+              if (found) {
+                if (found == 1) { // found a, need b
+                  if (sit->id == idb) {
+                    return evalCondition(it->type, state, sit->state);
+                  }
+                } else { // found b, need a
+                  if (sit->id == ida) {
+                    return evalCondition(it->type, sit->state, state);
+                  }
+                }
+              } else {
+                if (sit->id == ida) {
+                  found = 1;
+                  state = sit->state;
+                } else if (sit->id == idb) {
+                  found = 2;
+                  state = sit->state;
+                }
+              }
+            }
+            Serial.println("  Failed to find both sources!");
+            return false;
+          } else { // source against static
+            Serial.println("  Kind: Source vs Static");
+            for (auto sit = sources.begin(); sit != sources.end(); ++sit) {
+              yield();
+              if ((uint16_t)it->a == sit->id) {
+                return evalCondition(it->type, sit->state, it->b);
+              }
+            }
+            Serial.println("  Failed to find source!");
+            return false;
+          }
+        } else { // gate
+          Serial.println("  Type: Gate");
+          return evalCondition(it->type, (uint32_t)checkCondition(it->a),
+                               (uint32_t)checkCondition(it->b));
         }
+        return false;
       }
     }
     return false;
@@ -649,20 +698,42 @@ public:
       return;
 
     Serial.println(String("Checking Automation: ") + id);
-    if (!checkCondition(id)) {
-      Serial.println(String("  Condition for Automation was not satisfied!"));
-      return;
-    }
 
     for (auto it = automations.begin(); it != automations.end(); ++it) {
       yield();
       if (id == it->id) {
-        Serial.println(String("  Triggered Automation || topic: ") + it->topic +
-                       String(" | data: ") + it->data);
-        client.publish(it->topic.c_str(), it->data.c_str(), false);
+        if (checkCondition(it->condId)) {
+          Serial.println(String("  Triggered Automation || topic: ") +
+                         it->topic + String(" | data: ") + it->data);
+          client.publish(it->topic.c_str(), it->data.c_str(), false);
+        } else {
+          Serial.println("  Condition for Automation was not satisfied!");
+        }
         return;
       }
     }
     Serial.println(String("  Failed to find Automation!"));
   }
+
+  //   void checkAllAutomations() {
+  //     if (automations.size() == 0)
+  //       return;
+  //
+  //     Serial.println(String("Checking all # Automation: ") +
+  //     automations.size());
+  //
+  //     for (auto it = automations.begin(); it != automations.end(); ++it) {
+  //       yield();
+  //       Serial.println(String("Checking Automation: ") + it->id);
+  //       if (checkCondition(it->condId)) {
+  //         Serial.println(String("  Triggered Automation || topic: ") +
+  //         it->topic +
+  //                        String(" | data: ") + it->data);
+  //         client.publish(it->topic.c_str(), it->data.c_str(), false);
+  //       } else {
+  //         Serial.println("  Condition for Automation was not satisfied!");
+  //       }
+  //     }
+  //     Serial.println(String("  Failed to find Automation!"));
+  //   }
 } device;
