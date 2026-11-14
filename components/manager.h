@@ -75,10 +75,6 @@ private:
 
   enum CondSrcType { RAW, INT, LEN };
 
-  // TODO: just put state directly into here and provide the source's id inside
-  // cond a
-  // TODO: might then also make sense to make source ids independent of action
-  // (automation) ids
   struct CondSource {
     uint16_t id;
     uint32_t state;
@@ -271,6 +267,14 @@ private:
             conditions.clear();
             automations.clear();
             Serial.println("Cleared all actions, conditions and sources!");
+          } else if (topic == automationTopic + "/reload") {
+            sources.clear();
+            conditions.clear();
+            automations.clear();
+            client.unsubscribe((automationTopic + "/add/#").c_str());
+            client.subscribe((automationTopic + "/add/#").c_str());
+            Serial.println("Triggered a clear & reload of all actions, "
+                           "conditions and sources!");
           } else if (length == 0) {
             return;
           } else if (topic.startsWith(automationTopic + "/add/source/")) {
@@ -364,9 +368,8 @@ private:
     client.subscribe(otaServer.c_str());
 #endif
     client.subscribe((automationTopic + "/clear").c_str());
-    client.subscribe((automationTopic + "/add/source/#").c_str());
-    client.subscribe((automationTopic + "/add/condition/#").c_str());
-    client.subscribe((automationTopic + "/add/action/#").c_str());
+    client.subscribe((automationTopic + "/reload").c_str());
+    client.subscribe((automationTopic + "/add/#").c_str());
     client.subscribe((automationTopic + "/remove").c_str());
 
     for (auto it = sources.begin(); it != sources.end(); it++) {
